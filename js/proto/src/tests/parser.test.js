@@ -61,4 +61,55 @@ describe('parseImportStatment', () => {
 			source: './kiwi.js',
 		})
 	})
+
+	it('parses a named import with multiple locals', () => {
+		// Note: `import { default as foo }` is parsed in the same way.  The
+		// "default" only has a special meaning at runtime; it's not expected for
+		// parsers to understand the semantics of the word "default"
+		const source = `import { kiwi as foulTastingGarbage, apple } from "./kiwi.js";`
+		assert.deepEqual(parseImportStatement(source), {
+			type: 'ImportDeclaration',
+			specifiers: [
+				{
+					type: 'ImportSpecifier',
+					imported: 'kiwi',
+					local: 'foulTastingGarbage',
+				},
+				{
+					type: 'ImportSpecifier',
+					imported: 'apple',
+					local: 'apple',
+				},
+			],
+			source: './kiwi.js',
+		})
+	})
+
+	it('parses a default import', () => {
+		const source = `import kiwi from "./kiwi.js";`
+		assert.deepEqual(parseImportStatement(source), {
+			type: 'ImportDeclaration',
+			specifiers: [
+				{
+					type: 'ImportDefaultSpecifier',
+					local: 'kiwi',
+				},
+			],
+			source: './kiwi.js',
+		})
+	})
+
+	it('parses a namespace import', () => {
+		const source = `import * as kiwi from "./kiwi.js";`
+		assert.deepEqual(parseImportStatement(source), {
+			type: 'ImportDeclaration',
+			specifiers: [
+				{
+					type: 'ImportNamespaceSpecifier',
+					local: 'kiwi',
+				},
+			],
+			source: './kiwi.js',
+		})
+	})
 })
