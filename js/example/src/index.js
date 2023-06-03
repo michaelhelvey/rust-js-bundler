@@ -1,5 +1,5 @@
-import { banana } from './bannana.js'
+import { banana as fruit } from './bannana.js'
 import { kiwi } from './kiwi.js'
 
 console.log(kiwi())
-console.log(banana())
+console.log(fruit())

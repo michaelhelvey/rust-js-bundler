@@ -1,10 +1,11 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { inspect } from 'node:util'
 import { parseImportStatement } from './parser.js'
 
-const __dirname = path.dirname(new URL(import.meta.url).pathname)
-const ENTRYPOINT = path.join(__dirname, '../..', 'example/src/index.js')
+const dirname = path.dirname(fileURLToPath(import.meta.url))
+const ENTRYPOINT = path.join(dirname, '../..', 'example/src/index.js')
 
 async function main() {
 	const fileContents = await fs.readFile(ENTRYPOINT, 'utf8')
