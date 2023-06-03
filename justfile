@@ -1,5 +1,5 @@
 default:
-  cargo run -- --entrypoint ./example/src/index.js
+  cargo run -- --entrypoint ./js/example/src/index.js
 
 example:
   node ./example/src/index.js

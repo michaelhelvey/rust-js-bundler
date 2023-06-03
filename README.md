@@ -1,0 +1,3 @@
+# YAB
+
+Yet Another Bundler.

@@ -1,3 +1,3 @@
 export function kiwi() {
-  return "kiwi";
+	return 'kiwi'
 }
