@@ -1,0 +1,3 @@
+{
+	"rust-analyzer.linkedProjects": ["./crates/yab-parser/Cargo.toml"]
+}
