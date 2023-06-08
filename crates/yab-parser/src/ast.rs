@@ -1,34 +1,20 @@
 #![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 
-// Expressions evaluate to something
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "type")]
-pub enum Expression {
+pub enum Node {
+    Program(Program),
     BinaryExpression(BinaryExpression),
     CallExpression(CallExpression),
     NumericLiteral(NumericLiteral),
     Identifier(Identifier),
-}
-
-// Statements do not evaluate to anything, they just mutate the interpreter
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(tag = "type")]
-pub enum Statement {
     FunctionDeclaration(FunctionDeclaration),
     ReturnStatement(ReturnStatement),
     ExpressionStatement(ExpressionStatement),
+    Paramter(Parameter),
 }
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(tag = "type")]
-pub enum FunctionArgumentPattern {
-    Identifier(Identifier),
-    ObjectPattern(ObjectPattern),
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ObjectPattern {/* TODO */}
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Identifier {
@@ -42,20 +28,20 @@ impl Identifier {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct FunctionParam {
-    pat: FunctionArgumentPattern,
+pub struct Parameter {
+    pat: Box<Node>,
 }
 
-impl FunctionParam {
-    pub fn new(pat: FunctionArgumentPattern) -> Self {
-        Self { pat }
+impl Parameter {
+    pub fn new(pat: Node) -> Self {
+        Self { pat: Box::new(pat) }
     }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct VariableDeclarator {
     id: Identifier,
-    init: Option<Expression>,
+    init: Option<Node>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -71,11 +57,11 @@ impl NumericLiteral {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ExpressionStatement {
-    expression: Box<Expression>,
+    expression: Box<Node>,
 }
 
 impl ExpressionStatement {
-    pub fn new(expr: Expression) -> Self {
+    pub fn new(expr: Node) -> Self {
         Self {
             expression: Box::new(expr),
         }
@@ -84,13 +70,13 @@ impl ExpressionStatement {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct BinaryExpression {
-    lhs: Box<Expression>,
-    rhs: Box<Expression>,
+    lhs: Box<Node>,
+    rhs: Box<Node>,
     operator: String,
 }
 
 impl BinaryExpression {
-    pub fn new(lhs: Expression, rhs: Expression, operator: String) -> Self {
+    pub fn new(lhs: Node, rhs: Node, operator: String) -> Self {
         Self {
             lhs: Box::new(lhs),
             rhs: Box::new(rhs),
@@ -102,11 +88,11 @@ impl BinaryExpression {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CallExpression {
     callee: Identifier,
-    arguments: Vec<Expression>,
+    arguments: Vec<Node>,
 }
 
 impl CallExpression {
-    pub fn new(callee: String, arguments: Vec<Expression>) -> Self {
+    pub fn new(callee: String, arguments: Vec<Node>) -> Self {
         Self {
             callee: Identifier::new(callee),
             arguments,
@@ -116,11 +102,11 @@ impl CallExpression {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ReturnStatement {
-    argument: Box<Expression>,
+    argument: Box<Node>,
 }
 
 impl ReturnStatement {
-    pub fn new(expr: Expression) -> Self {
+    pub fn new(expr: Node) -> Self {
         Self {
             argument: Box::new(expr),
         }
@@ -129,7 +115,7 @@ impl ReturnStatement {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct BlockStatement {
-    statements: Vec<Statement>,
+    statements: Vec<Node>,
 }
 
 impl BlockStatement {
@@ -143,7 +129,7 @@ impl BlockStatement {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct FunctionDeclaration {
     identifier: Identifier,
-    params: Vec<FunctionParam>,
+    params: Vec<Parameter>,
     body: BlockStatement,
 }
 
@@ -156,11 +142,11 @@ impl FunctionDeclaration {
         }
     }
 
-    pub fn args_append(&mut self, argument: FunctionParam) {
+    pub fn args_append(&mut self, argument: Parameter) {
         self.params.push(argument)
     }
 
-    pub fn body_append(&mut self, stmt: Statement) {
+    pub fn body_append(&mut self, stmt: Node) {
         self.body.statements.push(stmt)
     }
 }
@@ -172,7 +158,7 @@ pub struct VariableDeclaration {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Program {
-    body: Vec<Statement>,
+    body: Vec<Node>,
 }
 
 impl Program {
@@ -180,7 +166,7 @@ impl Program {
         Self { body: Vec::new() }
     }
 
-    pub fn append(&mut self, stmt: Statement) {
+    pub fn append(&mut self, stmt: Node) {
         self.body.push(stmt);
     }
 }

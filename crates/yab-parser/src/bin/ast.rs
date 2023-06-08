@@ -1,5 +1,5 @@
 use color_eyre::Result;
-use yab_parser::ast::{self};
+use yab_parser::ast;
 
 fn main() -> Result<()> {
     /*
@@ -11,29 +11,30 @@ fn main() -> Result<()> {
     foo(1);
     */
     let mut function = ast::FunctionDeclaration::new("foo".to_string());
-    function.args_append(ast::FunctionParam::new(
-        ast::FunctionArgumentPattern::Identifier(ast::Identifier::new("a".to_string())),
-    ));
 
-    function.body_append(ast::Statement::ReturnStatement(ast::ReturnStatement::new(
-        ast::Expression::BinaryExpression(ast::BinaryExpression::new(
-            ast::Expression::Identifier(ast::Identifier::new("a".to_string())),
-            ast::Expression::NumericLiteral(ast::NumericLiteral::new(1.0)),
+    function.args_append(ast::Parameter::new(ast::Node::Identifier(
+        ast::Identifier::new("a".to_string()),
+    )));
+
+    function.body_append(ast::Node::ReturnStatement(ast::ReturnStatement::new(
+        ast::Node::BinaryExpression(ast::BinaryExpression::new(
+            ast::Node::Identifier(ast::Identifier::new("a".to_string())),
+            ast::Node::NumericLiteral(ast::NumericLiteral::new(1.0)),
             "+".to_string(),
         )),
     )));
 
     let mut program = ast::Program::new();
-    program.append(ast::Statement::FunctionDeclaration(function));
-    program.append(ast::Statement::ExpressionStatement(
-        ast::ExpressionStatement::new(ast::Expression::CallExpression(ast::CallExpression::new(
+    program.append(ast::Node::FunctionDeclaration(function));
+    program.append(ast::Node::ExpressionStatement(
+        ast::ExpressionStatement::new(ast::Node::CallExpression(ast::CallExpression::new(
             "foo".to_string(),
-            vec![ast::Expression::NumericLiteral(ast::NumericLiteral::new(
-                1.0,
-            ))],
+            vec![ast::Node::NumericLiteral(ast::NumericLiteral::new(1.0))],
         ))),
     ));
 
-    println!("{}", serde_json::to_string_pretty(&program)?);
+    let program_node = ast::Node::Program(program);
+
+    println!("{}", serde_json::to_string_pretty(&program_node)?);
     Ok(())
 }
