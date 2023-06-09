@@ -78,13 +78,14 @@ fn has_prefix_lookup_derive_inner(ast: &DeriveInput) -> syn::Result<TokenStream>
     }
 
     Ok(quote! {
-        use phf::phf_map;
-        static PHF: phf::Map<&'static str, &[&str]> = phf_map! {
-            #(#phf_map_arms),*
-        };
 
         impl HasPrefixLookup for #name {
             fn fields_starting_with(ident: &str) -> usize {
+                use phf::phf_map;
+                static PHF: phf::Map<&'static str, &[&str]> = phf_map! {
+                    #(#phf_map_arms),*
+                };
+
                 if let Some(matches) = PHF.get(ident) {
                     return matches.len();
                 }
