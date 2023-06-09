@@ -24,7 +24,7 @@ fn main() -> Result<()> {
         )),
     )));
 
-    let mut program = ast::Program::new();
+    let mut program = ast::Program::default();
     program.append(ast::Node::FunctionDeclaration(function));
     program.append(ast::Node::ExpressionStatement(
         ast::ExpressionStatement::new(ast::Node::CallExpression(ast::CallExpression::new(
@@ -34,7 +34,8 @@ fn main() -> Result<()> {
     ));
 
     let program_node = ast::Node::Program(program);
+    let pretty_program = serde_json::to_string_pretty(&program_node)?;
+    println!("{}", &pretty_program);
 
-    println!("{}", serde_json::to_string_pretty(&program_node)?);
     Ok(())
 }

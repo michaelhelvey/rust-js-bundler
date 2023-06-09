@@ -7,6 +7,10 @@ edition = "2021"
 
 [dependencies]
 color-eyre = "0.6.2"
+phf = { version = "0.11.1", features = ["macros"] }
 serde = { version = "1.0.164", features = ["derive"] }
 serde_json = "1.0.96"
+strum = { version = "0.24.1", features = ["derive"] }
+strum_macros = "0.24.3"
 tracing = "0.1.37"
+yab-parser-macros = { version = "0.1.0", path = "../yab-parser-macros" }

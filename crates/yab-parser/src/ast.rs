@@ -113,17 +113,9 @@ impl ReturnStatement {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Default)]
 pub struct BlockStatement {
     statements: Vec<Node>,
-}
-
-impl BlockStatement {
-    pub fn new() -> Self {
-        Self {
-            statements: Vec::new(),
-        }
-    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -138,7 +130,7 @@ impl FunctionDeclaration {
         Self {
             identifier: Identifier::new(ident),
             params: Vec::new(),
-            body: BlockStatement::new(),
+            body: BlockStatement::default(),
         }
     }
 
@@ -156,16 +148,12 @@ pub struct VariableDeclaration {
     declarations: Vec<VariableDeclarator>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Default)]
 pub struct Program {
     body: Vec<Node>,
 }
 
 impl Program {
-    pub fn new() -> Self {
-        Self { body: Vec::new() }
-    }
-
     pub fn append(&mut self, stmt: Node) {
         self.body.push(stmt);
     }
