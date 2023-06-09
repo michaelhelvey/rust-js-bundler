@@ -15,6 +15,7 @@ pub enum Token {
     TemplateLiteralContent(StringLiteral),
     TemplateLiteralClose(StringLiteral),
     ValueLiteral(ValueLiteral),
+    RegexLiteral(StringLiteral),
     Operator(Operator),
     Punctuation(Punctuation),
 }
@@ -31,6 +32,8 @@ trait HasPrefixLookup {
 #[strum(serialize_all = "snake_case")]
 pub enum KeywordType {
     Const,
+    Return,
+    Function,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -126,6 +129,21 @@ pub enum PunctuationType {
     #[token(lexeme = ";")]
     #[strum(serialize = ";")]
     Semicolon,
+    #[token(lexeme = "(")]
+    #[strum(serialize = "(")]
+    OpenParen,
+    #[token(lexeme = ")")]
+    #[strum(serialize = ")")]
+    CloseParen,
+    #[token(lexeme = "{")]
+    #[strum(serialize = "{")]
+    OpenBrace,
+    #[token(lexeme = "}")]
+    #[strum(serialize = "}")]
+    CloseBrace,
+    #[token(lexeme = ".")]
+    #[strum(serialize = ".")]
+    Dot,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -240,6 +258,36 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
         // * number literals
         // * regex literals
 
+        if current_char == '/' {
+            // Regexes are allowed to begin with any unicode code point EXCEPT
+            // line terminators, *, /, \, and [
+            // see: https://tc39.es/ecma262/#prod-RegularExpressionBackslashSequence
+            if let Some(next_char) = chars.peek() {
+                if !matches!(next_char, '/' | '*' | '[' | '\\') && !is_line_separator(*next_char) {
+                    let mut lexeme = String::from(current_char);
+                    'regex: for next_char in chars.by_ref() {
+                        lexeme.push(next_char);
+
+                        if next_char == '/' {
+                            while let Some(flag_char) = chars.peek() {
+                                if flag_char.is_alphabetic() {
+                                    lexeme.push(*flag_char);
+                                    _ = chars.next();
+                                } else {
+                                    break 'regex;
+                                }
+                            }
+                            break 'regex;
+                        }
+                    }
+
+                    tokens.push(Token::RegexLiteral(StringLiteral::from(lexeme)));
+
+                    continue 'outer;
+                }
+            }
+        }
+
         if current_char == '/' && matches!(chars.peek(), Some('/')) {
             // single line comment
             while let Some(next_char) = chars.next() {
@@ -305,9 +353,6 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
             if chars.peek().is_none() && !reached_str_end {
                 return Err(eyre!(unexpected_eof_msg));
             }
-
-            // Discard trailing string delimiter
-            _ = chars.next();
 
             tokens.push(Token::StringLiteral(lexeme.into()));
             continue 'outer;
@@ -705,8 +750,38 @@ ${world}`"#;
     }
 
     #[test]
-    fn sanit_tokenizes_a_variable_declaration() -> Result<()> {
-        let src = "const a = b;";
+    fn test_simple_regex_without_flags() -> Result<()> {
+        let src = r#"/hello/"#;
+        assert_eq!(
+            tokenize(src)?,
+            vec![Token::RegexLiteral(StringLiteral::from(
+                "/hello/".to_string(),
+            ))]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_regex_with_flags() -> Result<()> {
+        let src = r#"/hello/gmi"#;
+        assert_eq!(
+            tokenize(src)?,
+            vec![Token::RegexLiteral(StringLiteral::from(
+                "/hello/gmi".to_string(),
+            ))]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn sanity_check_large_expression() -> Result<()> {
+        let src = r#"
+const a = `my template: ${b}`;
+
+function foo() {
+    return /hello/gm.test("Hello");
+}
+"#;
 
         assert_eq!(
             tokenize(src)?,
@@ -714,8 +789,24 @@ ${world}`"#;
                 Token::Keyword(Keyword::new("const".try_into()?)),
                 Token::Ident(Ident::from("a".to_string())),
                 Token::Operator(Operator::new(OperatorType::Assignment)),
+                Token::TemplateLiteralOpen(StringLiteral::from("`my template: ${")),
                 Token::Ident(Ident::from("b".to_string())),
+                Token::TemplateLiteralClose(StringLiteral::from("}`")),
                 Token::Punctuation(Punctuation::new(PunctuationType::Semicolon)),
+                Token::Keyword(Keyword::new("function".try_into()?)),
+                Token::Ident(Ident::from("foo".to_string())),
+                Token::Punctuation(Punctuation::new(PunctuationType::OpenParen)),
+                Token::Punctuation(Punctuation::new(PunctuationType::CloseParen)),
+                Token::Punctuation(Punctuation::new(PunctuationType::OpenBrace)),
+                Token::Keyword(Keyword::new("return".try_into()?)),
+                Token::RegexLiteral(StringLiteral::from("/hello/gm".to_string())),
+                Token::Punctuation(Punctuation::new(PunctuationType::Dot)),
+                Token::Ident(Ident::from("test".to_string())),
+                Token::Punctuation(Punctuation::new(PunctuationType::OpenParen)),
+                Token::StringLiteral(StringLiteral::from("Hello".to_string())),
+                Token::Punctuation(Punctuation::new(PunctuationType::CloseParen)),
+                Token::Punctuation(Punctuation::new(PunctuationType::Semicolon)),
+                Token::Punctuation(Punctuation::new(PunctuationType::CloseBrace)),
             ]
         );
 
