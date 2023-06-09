@@ -16,6 +16,7 @@ pub enum Token {
     TemplateLiteralClose(StringLiteral),
     ValueLiteral(ValueLiteral),
     RegexLiteral(StringLiteral),
+    NumberLiteral(NumberLiteral),
     Operator(Operator),
     Punctuation(Punctuation),
 }
@@ -85,6 +86,25 @@ pub struct ValueLiteral {
 impl ValueLiteral {
     pub fn new(value_type: ValueLiteralType) -> Self {
         Self { value_type }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
+pub struct NumberLiteral {
+    value: f64,
+}
+
+impl NumberLiteral {
+    pub fn new(value: f64) -> Self {
+        Self { value }
+    }
+}
+
+impl From<i32> for NumberLiteral {
+    fn from(value: i32) -> Self {
+        Self {
+            value: value as f64,
+        }
     }
 }
 
@@ -254,14 +274,57 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
             continue 'outer;
         }
 
-        // TODO:
-        // * number literals
-        // * regex literals
+        if current_char.is_ascii_digit() {
+            let mut lexeme = String::from(current_char);
+            let mut base = 10;
+            let mut is_float = false;
+
+            if current_char == '0' {
+                // it's possible that we have an octal, hex, or binary digit on
+                // our hands:
+                if matches!(chars.peek(), Some('x') | Some('X')) {
+                    _ = chars.next();
+                    base = 16;
+                } else if matches!(chars.peek(), Some('b') | Some('B')) {
+                    _ = chars.next();
+                    base = 2;
+                } else if let Some(next_char) = chars.peek() {
+                    if next_char.is_ascii_digit() {
+                        base = 8;
+                    }
+                } else if matches!(chars.peek(), Some('o') | Some('O')) {
+                    _ = chars.next();
+                    base = 8;
+                }
+            }
+
+            for next_char in chars.by_ref() {
+                if matches!(next_char, '0'..='9' | 'a'..='f' | 'A'..='F' | '.' | '_' | '+' | '-' ) {
+                    lexeme.push(next_char);
+
+                    if next_char == '.' {
+                        is_float = true;
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            if is_float {
+                let value_as_float: f64 = lexical::parse(lexeme.as_str())?;
+                tokens.push(Token::NumberLiteral(NumberLiteral::new(value_as_float)));
+            } else {
+                let value_as_int: f64 = lexeme.parse()?;
+                tokens.push(Token::NumberLiteral(NumberLiteral::new(value_as_int)));
+            }
+
+            continue 'outer;
+        }
 
         if current_char == '/' {
             // Regexes are allowed to begin with any unicode code point EXCEPT
             // line terminators, *, /, \, and [
-            // see: https://tc39.es/ecma262/#prod-RegularExpressionBackslashSequence
+
             if let Some(next_char) = chars.peek() {
                 if !matches!(next_char, '/' | '*' | '[' | '\\') && !is_line_separator(*next_char) {
                     let mut lexeme = String::from(current_char);
@@ -323,10 +386,10 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
 
         if matches!(current_char, '\'' | '"') {
             let unexpected_eof_msg = "Unexpected EOF while parsing string";
-            let next_char = chars.next().ok_or(eyre!(unexpected_eof_msg))?;
-
-            let mut lexeme = String::from(next_char);
-
+            if chars.peek().is_none() {
+                return Err(eyre!(unexpected_eof_msg));
+            }
+            let mut lexeme = String::new();
             let mut reached_str_end = false;
             'string: while let Some(next_char) = chars.next() {
                 if matches!(next_char, '\'' | '"') {
@@ -774,12 +837,32 @@ ${world}`"#;
     }
 
     #[test]
+    fn test_integers() -> Result<()> {
+        let src = r#"123"#;
+        assert_eq!(
+            tokenize(src)?,
+            vec![Token::NumberLiteral(NumberLiteral::from(123))]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_hex_values() -> Result<()> {
+        let src = r#"0xFF"#;
+        assert_eq!(
+            tokenize(src)?,
+            vec![Token::NumberLiteral(NumberLiteral::from(255))]
+        );
+        Ok(())
+    }
+
+    #[test]
     fn sanity_check_large_expression() -> Result<()> {
         let src = r#"
 const a = `my template: ${b}`;
 
 function foo() {
-    return /hello/gm.test("Hello");
+    return /hello/gm.test("\u0041BC");
 }
 "#;
 
@@ -803,7 +886,7 @@ function foo() {
                 Token::Punctuation(Punctuation::new(PunctuationType::Dot)),
                 Token::Ident(Ident::from("test".to_string())),
                 Token::Punctuation(Punctuation::new(PunctuationType::OpenParen)),
-                Token::StringLiteral(StringLiteral::from("Hello".to_string())),
+                Token::StringLiteral(StringLiteral::from("ABC".to_string())),
                 Token::Punctuation(Punctuation::new(PunctuationType::CloseParen)),
                 Token::Punctuation(Punctuation::new(PunctuationType::Semicolon)),
                 Token::Punctuation(Punctuation::new(PunctuationType::CloseBrace)),
