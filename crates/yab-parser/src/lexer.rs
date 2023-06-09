@@ -183,7 +183,6 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
         // * number literals
         // * template literals
         // * regex literals
-        // * multi-line comment
 
         if current_char == '/' && matches!(chars.peek(), Some('/')) {
             // single line comment
@@ -202,6 +201,18 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
                 if is_line_separator(next_char) {
                     break;
                 }
+            }
+            continue 'outer;
+        }
+
+        if current_char == '/' && matches!(chars.peek(), Some('*')) {
+            // multi-line comment
+            let mut next_char = chars.next().unwrap();
+            while let Some(next_next_char) = chars.next() {
+                if next_char == '*' && next_next_char == '/' {
+                    break;
+                }
+                next_char = next_next_char;
             }
             continue 'outer;
         }
@@ -490,6 +501,21 @@ const
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().to_string(), "Unexpected character: #");
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_multi_line_comments() -> Result<()> {
+        let src = r#"
+/*
+ * this is a comment
+ */
+const /* more comments */
+"#;
+        assert_eq!(
+            tokenize(src)?,
+            vec![Token::Keyword(Keyword::new(KeywordType::Const))]
+        );
         Ok(())
     }
 
