@@ -53,8 +53,17 @@ pub enum Token {
     Keyword(Keyword),
     Ident(Ident),
     StringLiteral(StringLiteral),
+    BooleanLiteral(BooleanLiteral),
+    NullLiteral,
     Operator(Operator),
     Punctuation(Punctuation),
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq, EnumString)]
+#[strum(serialize_all = "snake_case")]
+pub enum BooleanLiteral {
+    True,
+    False,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, HasPrefixLookup, EnumString)]
@@ -125,6 +134,13 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
         if current_char.is_whitespace() {
             continue 'outer;
         }
+
+        // TODO:
+        // * number literals
+        // * template literals
+        // * regex literals
+        // * comment
+        // * don't have raw enums as token types because we are going to have to embed data in them like location
 
         if matches!(current_char, '\'' | '"') {
             let unexpected_eof_msg = "Unexpected EOF while parsing string";
@@ -221,9 +237,14 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
                 }
             }
 
-            match Keyword::try_from(lexeme.as_str()) {
-                Ok(keyword) => tokens.push(Token::Keyword(keyword)),
-                Err(_) => tokens.push(Token::Ident(Ident::from(lexeme))),
+            if let Ok(keyword) = Keyword::try_from(lexeme.as_str()) {
+                tokens.push(Token::Keyword(keyword));
+            } else if let Ok(boolean) = BooleanLiteral::try_from(lexeme.as_str()) {
+                tokens.push(Token::BooleanLiteral(boolean));
+            } else if lexeme == "null" {
+                tokens.push(Token::NullLiteral);
+            } else {
+                tokens.push(Token::Ident(Ident::from(lexeme)))
             }
 
             continue 'outer;
@@ -329,7 +350,33 @@ there"
     }
 
     #[test]
-    fn it_tokenizes_a_variable_declaration() -> Result<()> {
+    fn tokenize_boolean_literal() -> Result<()> {
+        let src = "true";
+
+        assert_eq!(
+            tokenize(src)?,
+            vec![Token::BooleanLiteral(BooleanLiteral::True)]
+        );
+
+        let src = "false";
+        assert_eq!(
+            tokenize(src)?,
+            vec![Token::BooleanLiteral(BooleanLiteral::False)]
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn tokenize_null_literal() -> Result<()> {
+        let src = "null";
+        assert_eq!(tokenize(src)?, vec![Token::NullLiteral]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn sanit_tokenizes_a_variable_declaration() -> Result<()> {
         let src = "const a = b;";
 
         assert_eq!(
