@@ -113,8 +113,11 @@ macro_rules! tokenize_prefix {
     };
 }
 
+fn is_line_separator(c: char) -> bool {
+    matches!(c, '\u{000A}' | '\u{000D}' | '\u{2028}' | '\u{2029}')
+}
+
 pub fn tokenize(source: &str) -> Result<Vec<Token>> {
-    // probabably does wonky things with non-ascii characters
     let mut chars = source.chars().peekable();
     let mut tokens = Vec::<Token>::new();
 
@@ -130,16 +133,72 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
             let mut lexeme = String::from(next_char);
 
             let mut reached_str_end = false;
-            'string: for next_char in chars.by_ref() {
+            'string: while let Some(next_char) = chars.next() {
                 if matches!(next_char, '\'' | '"') {
                     reached_str_end = true;
                     break 'string;
                 }
 
+                if is_line_separator(next_char) {
+                    return Err(eyre!("Unexpected line terminator while parsing string"));
+                }
+
+                if next_char == '\\' {
+                    // see: https://tc39.es/ecma262/#prod-EscapeSequence
+                    // see: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Lexical_grammar#escape_sequences
+                    let escaped_char = match chars.next() {
+                        Some('0') => Ok(Some('\u{0000}')), // NULL
+                        Some('\'') => Ok(Some('\'')),
+                        Some('"') => Ok(Some('"')),
+                        Some('\\') => Ok(Some('\\')),
+                        Some('n') => Ok(Some('\n')),       // LINEFEED
+                        Some('r') => Ok(Some('\r')),       // CARRIAGE RETURN
+                        Some('v') => Ok(Some('\u{000B}')), // LINE TABULATION
+                        Some('t') => Ok(Some('\t')),       // TAB
+                        Some('b') => Ok(Some('\u{0008}')), // BACKSPACE
+                        Some('f') => Ok(Some('\u{000C}')), // FORM FEED
+                        Some('u') => {
+                            let mut char_seq = String::new();
+                            let mut i = 0;
+                            while i < 4 {
+                                char_seq.push(chars.next().ok_or(eyre!(
+                                    "Unexpected EOF while parsing unicode escape sequence"
+                                ))?);
+                                i += 1;
+                            }
+
+                            let unicode_hex_value = u32::from_str_radix(char_seq.as_ref(), 16)?;
+                            let unicode_char = char::from_u32(unicode_hex_value);
+                            Ok(unicode_char)
+                        }
+                        Some('x') => {
+                            todo!("hex codes");
+                        }
+                        Some('c') => {
+                            todo!("control codes");
+                        }
+                        // Escaping a line terminator in a source file should
+                        // result in an empty string:
+                        // see: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Lexical_grammar#line_terminators
+                        Some('\u{000A}') => Ok(None),
+                        Some('\u{000D}') => Ok(None),
+                        Some('\u{2028}') => Ok(None),
+                        Some('\u{2029}') => Ok(None),
+                        Some(c) => Ok(Some(c)), // NonEscapeCharacter
+                        None => Err(eyre!("Unexpected EOF while parsing escape sequence")),
+                    };
+
+                    if let Some(c) = escaped_char? {
+                        lexeme.push(c);
+                    }
+
+                    continue 'string;
+                }
+
                 lexeme.push(next_char);
             }
 
-            if chars.peek().is_none() && reached_str_end == false {
+            if chars.peek().is_none() && !reached_str_end {
                 return Err(eyre!(unexpected_eof_msg));
             }
 
@@ -208,10 +267,15 @@ mod tests {
     }
 
     #[test]
-    fn string_literal_tokenization() -> Result<()> {
+    fn string_literal_simple() -> Result<()> {
         let src = r#""hello""#;
         assert_eq!(tokenize(src)?, vec![Token::StringLiteral("hello".into())]);
 
+        Ok(())
+    }
+
+    #[test]
+    fn string_literal_unexpected_eof() {
         let invalid_src_1 = r#"""#;
         let result = tokenize(invalid_src_1);
         assert!(result.is_err());
@@ -227,8 +291,41 @@ mod tests {
             result.unwrap_err().to_string(),
             "Unexpected EOF while parsing string"
         );
+    }
+
+    #[test]
+    fn string_literal_escape_sequences() -> Result<()> {
+        // "basic" escape sequences like \n, \t, etc:
+        let src = r#""h\ello\n""#;
+        let result = tokenize(src)?;
+        assert_eq!(result, vec![Token::StringLiteral("hello\n".into())]);
+
+        // escaping new line
+        let src = r#""hello \
+there""#;
+        let result = tokenize(src)?;
+        assert_eq!(result, vec![Token::StringLiteral("hello there".into())]);
+
+        // escaping unicode sequences
+        let src = r#""hello\u0041""#;
+        let result = tokenize(src)?;
+        assert_eq!(result, vec![Token::StringLiteral("helloA".into())]);
 
         Ok(())
+    }
+
+    #[test]
+    fn string_literal_unexpected_lt() {
+        let src = r#"
+"hello
+there"
+        "#;
+        let result = tokenize(src);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Unexpected line terminator while parsing string"
+        );
     }
 
     #[test]
