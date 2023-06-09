@@ -3,6 +3,17 @@ use serde::{Deserialize, Serialize};
 use strum_macros::EnumString;
 use yab_parser_macros::HasPrefixLookup;
 
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[serde(tag = "type")]
+pub enum Token {
+    Keyword(Keyword),
+    Ident(Ident),
+    StringLiteral(StringLiteral),
+    ValueLiteral(ValueLiteral),
+    Operator(Operator),
+    Punctuation(Punctuation),
+}
+
 /// Trait that can be implemented by operators and punctuators to look up how
 /// many members of the enum have lexemes that start with a particular prefix.
 /// This allows us to cheaply query in the tokenizer whether a given sequence
@@ -13,8 +24,19 @@ trait HasPrefixLookup {
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, EnumString)]
 #[strum(serialize_all = "snake_case")]
-pub enum Keyword {
+pub enum KeywordType {
     Const,
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
+pub struct Keyword {
+    keyword_type: KeywordType,
+}
+
+impl Keyword {
+    pub fn new(keyword_type: KeywordType) -> Self {
+        Self { keyword_type }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -48,27 +70,27 @@ impl From<&str> for StringLiteral {
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
-#[serde(tag = "type")]
-pub enum Token {
-    Keyword(Keyword),
-    Ident(Ident),
-    StringLiteral(StringLiteral),
-    BooleanLiteral(BooleanLiteral),
-    NullLiteral,
-    Operator(Operator),
-    Punctuation(Punctuation),
+pub struct ValueLiteral {
+    value_type: ValueLiteralType,
+}
+
+impl ValueLiteral {
+    pub fn new(value_type: ValueLiteralType) -> Self {
+        Self { value_type }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, EnumString)]
 #[strum(serialize_all = "snake_case")]
-pub enum BooleanLiteral {
+pub enum ValueLiteralType {
     True,
     False,
+    Null,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, HasPrefixLookup, EnumString)]
 #[strum(serialize_all = "snake_case")]
-pub enum Operator {
+pub enum OperatorType {
     #[token(lexeme = "+")]
     #[strum(serialize = "+")]
     Plus,
@@ -83,24 +105,46 @@ pub enum Operator {
     StrictEquality,
 }
 
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
+pub struct Operator {
+    operator_type: OperatorType,
+}
+
+impl Operator {
+    pub fn new(operator_type: OperatorType) -> Self {
+        Self { operator_type }
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, PartialEq, EnumString, HasPrefixLookup)]
-pub enum Punctuation {
+pub enum PunctuationType {
     #[token(lexeme = ";")]
     #[strum(serialize = ";")]
     Semicolon,
 }
 
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
+pub struct Punctuation {
+    punct_type: PunctuationType,
+}
+
+impl Punctuation {
+    pub fn new(punct_type: PunctuationType) -> Self {
+        Self { punct_type }
+    }
+}
+
 macro_rules! tokenize_prefix {
-    ($token_type:ident, $current_char:ident, $chars:ident, $tokens:ident, $cont_label:lifetime) => {
+    ($token_type:ident, $enum_type:ident, $current_char:ident, $chars:ident, $tokens:ident, $cont_label:lifetime) => {
         // There doesn't seem to be a way to get a slice out of an iterator, so
         // for now we will just allocate :/
         let mut prefix_lexeme = String::from($current_char);
-        let mut prefix_matches = $token_type::fields_starting_with(&prefix_lexeme);
+        let mut prefix_matches = $enum_type::fields_starting_with(&prefix_lexeme);
 
         if prefix_matches > 0 {
             'prefix: while let Some(next_char) = $chars.peek() {
                 prefix_lexeme.push(*next_char);
-                prefix_matches = $token_type::fields_starting_with(&prefix_lexeme);
+                prefix_matches = $enum_type::fields_starting_with(&prefix_lexeme);
 
                 if prefix_matches == 0 {
                     prefix_lexeme = prefix_lexeme[0..prefix_lexeme.len() - 1].to_string();
@@ -111,12 +155,12 @@ macro_rules! tokenize_prefix {
             }
 
             let prefix_ref: &str = prefix_lexeme.as_ref();
-            let prefix: $token_type = prefix_ref.try_into().expect(&format!(
+            let prefix: $enum_type = prefix_ref.try_into().expect(&format!(
                 "Internal tokenizer error: could not parse {} into $token_type",
                 prefix_ref
             ));
 
-            $tokens.push(Token::$token_type(prefix));
+            $tokens.push(Token::$token_type($token_type::new(prefix)));
             continue $cont_label;
         }
     };
@@ -140,7 +184,6 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
         // * template literals
         // * regex literals
         // * comment
-        // * don't have raw enums as token types because we are going to have to embed data in them like location
 
         if matches!(current_char, '\'' | '"') {
             let unexpected_eof_msg = "Unexpected EOF while parsing string";
@@ -237,12 +280,10 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
                 }
             }
 
-            if let Ok(keyword) = Keyword::try_from(lexeme.as_str()) {
-                tokens.push(Token::Keyword(keyword));
-            } else if let Ok(boolean) = BooleanLiteral::try_from(lexeme.as_str()) {
-                tokens.push(Token::BooleanLiteral(boolean));
-            } else if lexeme == "null" {
-                tokens.push(Token::NullLiteral);
+            if let Ok(keyword_type) = KeywordType::try_from(lexeme.as_str()) {
+                tokens.push(Token::Keyword(Keyword::new(keyword_type)));
+            } else if let Ok(value) = ValueLiteralType::try_from(lexeme.as_str()) {
+                tokens.push(Token::ValueLiteral(ValueLiteral::new(value)));
             } else {
                 tokens.push(Token::Ident(Ident::from(lexeme)))
             }
@@ -250,8 +291,8 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
             continue 'outer;
         }
 
-        tokenize_prefix!(Operator, current_char, chars, tokens, 'outer);
-        tokenize_prefix!(Punctuation, current_char, chars, tokens, 'outer);
+        tokenize_prefix!(Operator, OperatorType, current_char, chars, tokens, 'outer);
+        tokenize_prefix!(Punctuation, PunctuationType, current_char, chars, tokens, 'outer);
     }
 
     Ok(tokens)
@@ -264,26 +305,32 @@ mod tests {
 
     #[test]
     fn test_macro_prefix_lookup() -> Result<()> {
-        assert_eq!(Operator::fields_starting_with("="), 3);
-        assert_eq!(Operator::fields_starting_with("=="), 2);
-        assert_eq!(Operator::fields_starting_with("==="), 1);
-        assert_eq!(Operator::fields_starting_with("~!~~"), 0);
+        assert_eq!(OperatorType::fields_starting_with("="), 3);
+        assert_eq!(OperatorType::fields_starting_with("=="), 2);
+        assert_eq!(OperatorType::fields_starting_with("==="), 1);
+        assert_eq!(OperatorType::fields_starting_with("~!~~"), 0);
 
         Ok(())
     }
 
     #[test]
     fn operator_tokenization() -> Result<()> {
-        assert_eq!(tokenize("=")?, vec![Token::Operator(Operator::Assignment)]);
+        assert_eq!(
+            tokenize("=")?,
+            vec![Token::Operator(Operator::new(OperatorType::Assignment))]
+        );
         assert_eq!(
             tokenize("==")?,
-            vec![Token::Operator(Operator::LooseEquality)]
+            vec![Token::Operator(Operator::new(OperatorType::LooseEquality))]
         );
         assert_eq!(
             tokenize("===")?,
-            vec![Token::Operator(Operator::StrictEquality)]
+            vec![Token::Operator(Operator::new(OperatorType::StrictEquality))]
         );
-        assert_eq!(tokenize("+")?, vec![Token::Operator(Operator::Plus)]);
+        assert_eq!(
+            tokenize("+")?,
+            vec![Token::Operator(Operator::new(OperatorType::Plus))]
+        );
         Ok(())
     }
 
@@ -355,13 +402,17 @@ there"
 
         assert_eq!(
             tokenize(src)?,
-            vec![Token::BooleanLiteral(BooleanLiteral::True)]
+            vec![Token::ValueLiteral(ValueLiteral::new(
+                ValueLiteralType::True
+            ))]
         );
 
         let src = "false";
         assert_eq!(
             tokenize(src)?,
-            vec![Token::BooleanLiteral(BooleanLiteral::False)]
+            vec![Token::ValueLiteral(ValueLiteral::new(
+                ValueLiteralType::False
+            ))]
         );
 
         Ok(())
@@ -370,7 +421,12 @@ there"
     #[test]
     fn tokenize_null_literal() -> Result<()> {
         let src = "null";
-        assert_eq!(tokenize(src)?, vec![Token::NullLiteral]);
+        assert_eq!(
+            tokenize(src)?,
+            vec![Token::ValueLiteral(ValueLiteral::new(
+                ValueLiteralType::Null
+            ))]
+        );
 
         Ok(())
     }
@@ -382,11 +438,11 @@ there"
         assert_eq!(
             tokenize(src)?,
             vec![
-                Token::Keyword("const".try_into()?),
+                Token::Keyword(Keyword::new("const".try_into()?)),
                 Token::Ident(Ident::from("a".to_string())),
-                Token::Operator(Operator::Assignment),
+                Token::Operator(Operator::new(OperatorType::Assignment)),
                 Token::Ident(Ident::from("b".to_string())),
-                Token::Punctuation(Punctuation::Semicolon),
+                Token::Punctuation(Punctuation::new(PunctuationType::Semicolon)),
             ]
         );
 
