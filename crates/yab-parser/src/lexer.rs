@@ -183,7 +183,18 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
         // * number literals
         // * template literals
         // * regex literals
-        // * comment
+        // * multi-line comment
+        // * hashbang comment
+
+        if current_char == '/' && matches!(chars.peek(), Some('/')) {
+            // single line comment
+            while let Some(next_char) = chars.next() {
+                if is_line_separator(next_char) {
+                    break;
+                }
+            }
+            continue 'outer;
+        }
 
         if matches!(current_char, '\'' | '"') {
             let unexpected_eof_msg = "Unexpected EOF while parsing string";
@@ -428,6 +439,19 @@ there"
             ))]
         );
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_single_line_comments() -> Result<()> {
+        let src = r#"
+// this is a comment
+const // also a comment
+"#;
+        assert_eq!(
+            tokenize(src)?,
+            vec![Token::Keyword(Keyword::new(KeywordType::Const))]
+        );
         Ok(())
     }
 
