@@ -184,10 +184,20 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
         // * template literals
         // * regex literals
         // * multi-line comment
-        // * hashbang comment
 
         if current_char == '/' && matches!(chars.peek(), Some('/')) {
             // single line comment
+            while let Some(next_char) = chars.next() {
+                if is_line_separator(next_char) {
+                    break;
+                }
+            }
+            continue 'outer;
+        }
+
+        // Hashbang comments are only allowed at the beginning of the file:
+        if current_char == '#' && matches!(chars.peek(), Some('!')) && tokens.len() == 0 {
+            // hashbang comment
             while let Some(next_char) = chars.next() {
                 if is_line_separator(next_char) {
                     break;
@@ -304,6 +314,8 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
 
         tokenize_prefix!(Operator, OperatorType, current_char, chars, tokens, 'outer);
         tokenize_prefix!(Punctuation, PunctuationType, current_char, chars, tokens, 'outer);
+
+        return Err(eyre!("Unexpected character: {}", current_char));
     }
 
     Ok(tokens)
@@ -452,6 +464,32 @@ const // also a comment
             tokenize(src)?,
             vec![Token::Keyword(Keyword::new(KeywordType::Const))]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn test_hashbang() -> Result<()> {
+        let src = r#"
+#!/usr/bin/env node
+const
+"#;
+        assert_eq!(
+            tokenize(src)?,
+            vec![Token::Keyword(Keyword::new(KeywordType::Const))]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_hashbang_not_at_beginning_of_file() -> Result<()> {
+        let src = r#"
+const
+#!/usr/bin/env node
+"#;
+        let result = tokenize(src);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().to_string(), "Unexpected character: #");
+
         Ok(())
     }
 
