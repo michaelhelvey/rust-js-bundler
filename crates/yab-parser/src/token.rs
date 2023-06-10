@@ -88,20 +88,13 @@ impl ValueLiteral {
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct NumberLiteral {
-    value: f64,
+    // FIXME: these should not be strings long-term
+    value: String,
 }
 
 impl NumberLiteral {
-    pub fn new(value: f64) -> Self {
+    pub fn new(value: String) -> Self {
         Self { value }
-    }
-}
-
-impl From<i32> for NumberLiteral {
-    fn from(value: i32) -> Self {
-        Self {
-            value: value as f64,
-        }
     }
 }
 

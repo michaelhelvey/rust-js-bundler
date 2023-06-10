@@ -105,47 +105,20 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
 
         if current_char.is_ascii_digit() {
             let mut lexeme = String::from(current_char);
-            let mut base = 10;
-            let mut is_float = false;
-
-            if current_char == '0' {
-                // it's possible that we have an octal, hex, or binary digit on
-                // our hands:
-                if matches!(chars.peek(), Some('x') | Some('X')) {
-                    _ = chars.next();
-                    base = 16;
-                } else if matches!(chars.peek(), Some('b') | Some('B')) {
-                    _ = chars.next();
-                    base = 2;
-                } else if let Some(next_char) = chars.peek() {
-                    if next_char.is_ascii_digit() {
-                        base = 8;
-                    }
-                } else if matches!(chars.peek(), Some('o') | Some('O')) {
-                    _ = chars.next();
-                    base = 8;
-                }
-            }
 
             for next_char in chars.by_ref() {
-                if matches!(next_char, '0'..='9' | 'a'..='f' | 'A'..='F' | '.' | '_' | '+' | '-' ) {
+                // First pass: just collect all of the digits that _could_
+                // represent a number, and then we will write a number parser
+                // later.
+                if matches!(next_char, '0'..='9' | 'a'..='f' | 'A'..='F' | '.' | '_' | '+' | '-' | 'o' | 'O' | 'x' | 'X')
+                {
                     lexeme.push(next_char);
-
-                    if next_char == '.' {
-                        is_float = true;
-                    }
                 } else {
                     break;
                 }
             }
 
-            if is_float {
-                let value_as_float: f64 = lexical::parse(lexeme.as_str())?;
-                tokens.push(Token::NumberLiteral(NumberLiteral::new(value_as_float)));
-            } else {
-                let value_as_int: f64 = lexeme.parse()?;
-                tokens.push(Token::NumberLiteral(NumberLiteral::new(value_as_int)));
-            }
+            tokens.push(Token::NumberLiteral(NumberLiteral::new(lexeme)));
 
             continue 'outer;
         }
@@ -670,7 +643,7 @@ ${world}`"#;
         let src = r#"123"#;
         assert_eq!(
             tokenize(src)?,
-            vec![Token::NumberLiteral(NumberLiteral::from(123))]
+            vec![Token::NumberLiteral(NumberLiteral::new("123".into()))]
         );
         Ok(())
     }
@@ -680,7 +653,17 @@ ${world}`"#;
         let src = r#"0xFF"#;
         assert_eq!(
             tokenize(src)?,
-            vec![Token::NumberLiteral(NumberLiteral::from(255))]
+            vec![Token::NumberLiteral(NumberLiteral::new("0xFF".into()))]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_hex_values_with_exponent() -> Result<()> {
+        let src = r#"0xFF3e2"#;
+        assert_eq!(
+            tokenize(src)?,
+            vec![Token::NumberLiteral(NumberLiteral::new("0xFF3e2".into()))]
         );
         Ok(())
     }
