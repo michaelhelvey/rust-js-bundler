@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use strum_macros::EnumString;
 use yab_parser_macros::HasPrefixLookup;
 
+use crate::number::NumberLiteralValue;
+
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum Token {
@@ -86,15 +88,30 @@ impl ValueLiteral {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct NumberLiteral {
-    // FIXME: these should not be strings long-term
-    value: String,
+    value: NumberLiteralValue,
 }
 
 impl NumberLiteral {
-    pub fn new(value: String) -> Self {
+    pub fn new(value: NumberLiteralValue) -> Self {
         Self { value }
+    }
+}
+
+impl From<f64> for NumberLiteral {
+    fn from(value: f64) -> Self {
+        Self {
+            value: NumberLiteralValue::Primitive(value),
+        }
+    }
+}
+
+impl From<i32> for NumberLiteral {
+    fn from(value: i32) -> Self {
+        Self {
+            value: NumberLiteralValue::Primitive(value as f64),
+        }
     }
 }
 

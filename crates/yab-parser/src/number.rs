@@ -10,6 +10,7 @@ use nom::{
 };
 use num_bigint::BigInt;
 use num_traits::Num;
+use serde::{Deserialize, Serialize};
 
 /// Parses the optional prefix for a number (e.g. 0x, 0b, 0o), returning the
 /// numeric part after the prefix, along with the base that the prefix indicates.
@@ -72,11 +73,11 @@ fn parse_suffix(lexeme: &str) -> Result<Option<NumberSuffixResult>> {
                 return Err(eyre!("Unexpected 'n' after exponent in base-10 number"));
             }
 
-            return Ok(Some(NumberSuffixResult::Exponent(exponent)));
+            Ok(Some(NumberSuffixResult::Exponent(exponent)))
         }
         None => match n_parser(remaining) {
-            Ok((_, _)) => return Ok(Some(NumberSuffixResult::BigInt)),
-            Err(_) => return Ok(None),
+            Ok((_, _)) => Ok(Some(NumberSuffixResult::BigInt)),
+            Err(_) => Ok(None),
         },
     }
 }
@@ -95,7 +96,7 @@ fn parse_number_part(lexeme: &str, base: u32) -> IResult<&str, NumberParseResult
             // parsing code.
             _ => panic!("unreachable"),
         };
-        return is_valid_number || c == '_';
+        is_valid_number || c == '_'
     });
     let after_number_parser = alt((digit0, tag("_")));
 
@@ -112,36 +113,54 @@ fn parse_number_part(lexeme: &str, base: u32) -> IResult<&str, NumberParseResult
         suffix,
         NumberParseResult {
             is_float,
-            lexeme: lexeme.replace("_", ""),
+            lexeme: lexeme.replace('_', ""),
         },
     ))
 }
 
 #[derive(Debug, PartialEq)]
-pub enum NumberLiteral {
+pub enum NumberLiteralValue {
     Primitive(f64),
     BigInteger(num_bigint::BigInt),
 }
 
-impl From<f64> for NumberLiteral {
+impl Serialize for NumberLiteralValue {
+    fn serialize<S>(&self, _serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        todo!()
+    }
+}
+
+impl<'de> Deserialize<'de> for NumberLiteralValue {
+    fn deserialize<D>(_deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        todo!()
+    }
+}
+
+impl From<f64> for NumberLiteralValue {
     fn from(value: f64) -> Self {
         Self::Primitive(value)
     }
 }
 
-impl From<i64> for NumberLiteral {
+impl From<i64> for NumberLiteralValue {
     fn from(value: i64) -> Self {
         Self::Primitive(value as f64)
     }
 }
 
-impl From<BigInt> for NumberLiteral {
+impl From<BigInt> for NumberLiteralValue {
     fn from(value: BigInt) -> Self {
         Self::BigInteger(value)
     }
 }
 
-pub fn parse_number(lexeme: &str, allow_sloppy_octal: bool) -> Result<NumberLiteral> {
+pub fn parse_number(lexeme: &str, allow_sloppy_octal: bool) -> Result<NumberLiteralValue> {
     // Test for invalid prefixes.  This is ideally done by the lexer itself
     // before this is ever called.
     match alt((tag::<&str, &str, Error<&str>>("-"), tag("+"), hex_digit1))(lexeme) {
@@ -211,7 +230,7 @@ pub fn parse_number(lexeme: &str, allow_sloppy_octal: bool) -> Result<NumberLite
     };
 
     if let Some(NumberSuffixResult::Exponent(exp)) = suffix_result {
-        value = value * 10f64.powi(exp);
+        value *= 10f64.powi(exp);
     }
 
     Ok(value.into())

@@ -1,9 +1,12 @@
 use color_eyre::{eyre::eyre, Result};
 use std::{iter::Peekable, str::Chars};
 
-use crate::token::{
-    HasPrefixLookup, Ident, Keyword, KeywordType, NumberLiteral, Operator, OperatorType,
-    Punctuation, PunctuationType, StringLiteral, Token, ValueLiteral, ValueLiteralType,
+use crate::{
+    number::parse_number,
+    token::{
+        HasPrefixLookup, Ident, Keyword, KeywordType, NumberLiteral, Operator, OperatorType,
+        Punctuation, PunctuationType, StringLiteral, Token, ValueLiteral, ValueLiteralType,
+    },
 };
 
 macro_rules! tokenize_prefix {
@@ -103,13 +106,19 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
             continue 'outer;
         }
 
-        if current_char.is_ascii_digit() {
+        // if the current character is (optionally) +/- followed by digit,
+        // (or simply a digit) start trying to parse the remaining tokens as a
+        // number, until we reach whitespace.  Then pass the result to our real
+        // number parser to create the number -- if it's not a valid number,
+        // then it's not a valid identifier anyway because it starts with a
+        // number, so the number parsing error is the appropriate thing to
+        // return.
+        let mut could_be_number =
+            matches!(current_char, '+' | '-') && matches!(chars.peek(), Some('0'..='9'));
+        could_be_number = could_be_number || current_char.is_ascii_digit();
+        if could_be_number {
             let mut lexeme = String::from(current_char);
-
             for next_char in chars.by_ref() {
-                // First pass: just collect all of the digits that _could_
-                // represent a number, and then we will write a number parser
-                // later.
                 if matches!(next_char, '0'..='9' | 'a'..='f' | 'A'..='F' | '.' | '_' | '+' | '-' | 'o' | 'O' | 'x' | 'X')
                 {
                     lexeme.push(next_char);
@@ -117,8 +126,8 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
                     break;
                 }
             }
-
-            tokens.push(Token::NumberLiteral(NumberLiteral::new(lexeme)));
+            let number_value = parse_number(lexeme.as_ref(), true)?;
+            tokens.push(Token::NumberLiteral(NumberLiteral::new(number_value)));
             continue 'outer;
         }
 
@@ -163,7 +172,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
         }
 
         // Hashbang comments are only allowed at the beginning of the file:
-        if current_char == '#' && matches!(chars.peek(), Some('!')) && tokens.len() == 0 {
+        if current_char == '#' && matches!(chars.peek(), Some('!')) && tokens.is_empty() {
             // hashbang comment
             while let Some(next_char) = chars.next() {
                 if is_line_separator(next_char) {
@@ -641,30 +650,14 @@ ${world}`"#;
     #[test]
     fn test_integers() -> Result<()> {
         let src = r#"123"#;
-        assert_eq!(
-            tokenize(src)?,
-            vec![Token::NumberLiteral(NumberLiteral::new("123".into()))]
-        );
+        assert_eq!(tokenize(src)?, vec![Token::NumberLiteral(123.into())]);
         Ok(())
     }
 
     #[test]
     fn test_hex_values() -> Result<()> {
         let src = r#"0xFF"#;
-        assert_eq!(
-            tokenize(src)?,
-            vec![Token::NumberLiteral(NumberLiteral::new("0xFF".into()))]
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn test_hex_values_with_exponent() -> Result<()> {
-        let src = r#"0xFF3e2"#;
-        assert_eq!(
-            tokenize(src)?,
-            vec![Token::NumberLiteral(NumberLiteral::new("0xFF3e2".into()))]
-        );
+        assert_eq!(tokenize(src)?, vec![Token::NumberLiteral(255.into())]);
         Ok(())
     }
 
