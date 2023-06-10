@@ -119,7 +119,6 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
             }
 
             tokens.push(Token::NumberLiteral(NumberLiteral::new(lexeme)));
-
             continue 'outer;
         }
 
@@ -315,6 +314,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
         if current_char.is_alphabetic() {
             let mut lexeme = String::from(current_char);
 
+            // TODO: support unicode escape sequences in identifiers
             'ident: while let Some(next_char) = chars.peek() {
                 if next_char.is_alphabetic() {
                     lexeme.push(*next_char);
