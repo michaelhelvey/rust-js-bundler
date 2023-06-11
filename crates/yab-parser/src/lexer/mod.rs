@@ -2,7 +2,9 @@ use color_eyre::{eyre::eyre, Result};
 use std::{iter::Peekable, str::Chars};
 
 mod number;
+mod string;
 mod token;
+mod escape_chars;
 
 use number::parse_number;
 use token::{
