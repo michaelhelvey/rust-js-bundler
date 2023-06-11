@@ -1,12 +1,13 @@
 use color_eyre::{eyre::eyre, Result};
 use std::{iter::Peekable, str::Chars};
 
-use crate::{
-    number::parse_number,
-    token::{
-        HasPrefixLookup, Ident, Keyword, KeywordType, NumberLiteral, Operator, OperatorType,
-        Punctuation, PunctuationType, StringLiteral, Token, ValueLiteral, ValueLiteralType,
-    },
+mod number;
+mod token;
+
+use number::parse_number;
+use token::{
+    HasPrefixLookup, Ident, Keyword, KeywordType, NumberLiteral, Operator, OperatorType,
+    Punctuation, PunctuationType, StringLiteral, Token, ValueLiteral, ValueLiteralType,
 };
 
 macro_rules! tokenize_prefix {

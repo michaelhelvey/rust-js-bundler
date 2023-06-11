@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use strum_macros::EnumString;
 use yab_parser_macros::HasPrefixLookup;
 
-use crate::number::NumberLiteralValue;
+use super::number::NumberLiteralValue;
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type")]
