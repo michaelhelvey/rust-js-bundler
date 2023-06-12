@@ -1,12 +1,13 @@
 use color_eyre::{eyre::eyre, Result};
 use std::{iter::Peekable, str::Chars};
 
-mod number;
+mod escape_chars;
+mod num;
+mod old_number;
 mod string;
 mod token;
-mod escape_chars;
 
-use number::parse_number;
+use old_number::parse_number;
 use token::{
     HasPrefixLookup, Ident, Keyword, KeywordType, NumberLiteral, Operator, OperatorType,
     Punctuation, PunctuationType, StringLiteral, Token, ValueLiteral, ValueLiteralType,

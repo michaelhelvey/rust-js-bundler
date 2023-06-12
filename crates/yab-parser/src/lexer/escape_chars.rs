@@ -16,8 +16,7 @@ use std::{iter::Peekable, str::Chars};
 /// the parsed sequence.
 ///
 /// *Note*:  The caller is responsible for ensuring that the initial character
-/// is a valid octal digit, which is why it returns a `Result<char>` and not a
-/// `Result<Option<char>>` as the other functions do.
+/// is a valid octal digit.
 fn parse_octal_escape_sequence(chars: &mut Peekable<Chars>, init: char) -> Result<char> {
     let mut value = init.to_digit(8).ok_or(eyre!(
         "internal parser error: caller must check that '{}' is a valid octal",
