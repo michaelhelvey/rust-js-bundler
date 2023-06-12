@@ -1,11 +1,15 @@
 #![allow(dead_code)]
-//! Javascript number parser
-
 use color_eyre::{eyre::eyre, Result};
+use serde::Serialize;
 use std::{iter::Peekable, str::Chars};
 
-#[derive(Debug, PartialEq)]
-pub enum NumberLiteral {
+#[derive(Debug, Serialize)]
+pub struct NumberLiteral {
+    pub value: NumberLiteralValue,
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+pub enum NumberLiteralValue {
     Primitive(f64),
     BigInt(BigIntStorage),
 }
@@ -16,13 +20,22 @@ pub struct BigIntStorage {
     pub lexeme: String,
 }
 
-impl From<f64> for NumberLiteral {
+impl Serialize for BigIntStorage {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.lexeme)
+    }
+}
+
+impl From<f64> for NumberLiteralValue {
     fn from(value: f64) -> Self {
         Self::Primitive(value)
     }
 }
 
-impl From<i32> for NumberLiteral {
+impl From<i32> for NumberLiteralValue {
     fn from(value: i32) -> Self {
         Self::Primitive(value as f64)
     }
@@ -108,7 +121,7 @@ fn parse_maybe_big_int(
     mut lexeme: String,
     base: u32,
     sign: Sign,
-) -> Result<NumberLiteral> {
+) -> Result<NumberLiteralValue> {
     let is_big_int = match chars.peek() {
         Some('n') => true,
         _ => false,
@@ -126,7 +139,7 @@ fn parse_maybe_big_int(
             // TODO: write a "pretty formatter" for big int based on the base,
             // e.g. we want "0xFFn", not "FF"
             lexeme.push('n');
-            Ok(NumberLiteral::BigInt(BigIntStorage { value, lexeme }))
+            Ok(NumberLiteralValue::BigInt(BigIntStorage { value, lexeme }))
         }
         false => {
             let value = match base {
@@ -134,12 +147,12 @@ fn parse_maybe_big_int(
                 _ => i64::from_str_radix(&lexeme, base)? as f64,
             };
 
-            Ok(NumberLiteral::Primitive(sign.apply_f64(value)))
+            Ok(NumberLiteralValue::Primitive(sign.apply_f64(value)))
         }
     }
 }
 
-fn parse_base_10(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLiteral> {
+fn parse_base_10(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLiteralValue> {
     let mut lexeme = String::new();
 
     'number: while let Some(c) = chars.peek() {
@@ -162,7 +175,7 @@ fn parse_base_10(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLitera
     }
 }
 
-fn parse_hex_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLiteral> {
+fn parse_hex_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLiteralValue> {
     let mut lexeme = String::new();
     while let Some(c) = chars.peek() {
         if c.is_ascii_hexdigit() {
@@ -176,7 +189,7 @@ fn parse_hex_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLit
     Ok(parse_maybe_big_int(chars, lexeme, 16, sign)?)
 }
 
-fn parse_bin_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLiteral> {
+fn parse_bin_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLiteralValue> {
     let mut lexeme = String::new();
     while let Some(c) = chars.peek() {
         if c.is_ascii_hexdigit() {
@@ -190,7 +203,7 @@ fn parse_bin_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLit
     Ok(parse_maybe_big_int(chars, lexeme, 2, sign)?)
 }
 
-fn parse_oct_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLiteral> {
+fn parse_oct_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLiteralValue> {
     let mut lexeme = String::new();
     while let Some(c) = chars.peek() {
         if c.is_ascii_hexdigit() {
@@ -204,7 +217,13 @@ fn parse_oct_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLit
     Ok(parse_maybe_big_int(chars, lexeme, 8, sign)?)
 }
 
-fn parse_leading_zero_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLiteral> {
+/// Attempts to parse a number out of a lexeme that begins with a leading "0".
+/// For example, the literal number "0", or differently-based values like
+/// hexadecimal or binary.
+fn parse_leading_zero_number(
+    chars: &mut Peekable<Chars>,
+    sign: Sign,
+) -> Result<NumberLiteralValue> {
     // Consume leading zero:
     _ = chars.next();
 
@@ -238,7 +257,7 @@ fn parse_leading_zero_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<
 ///
 /// * Err(Error) - the next character of the iterator began a number literal,
 /// but it was malformed or otherwise unable to be parsed.
-pub fn try_parse_number(chars: &mut Peekable<Chars>) -> Result<Option<NumberLiteral>> {
+pub fn try_parse_number(chars: &mut Peekable<Chars>) -> Result<Option<NumberLiteralValue>> {
     let sign = match chars.peek() {
         Some('+') | Some('-') => Sign::from(chars.next()),
         _ => Sign::Positive,
@@ -306,7 +325,7 @@ mod tests {
         let mut chars = src.chars().peekable();
         assert_eq!(
             try_parse_number(&mut chars).unwrap().unwrap(),
-            NumberLiteral::BigInt(BigIntStorage {
+            NumberLiteralValue::BigInt(BigIntStorage {
                 value: num_bigint::BigInt::parse_bytes(b"123", 10).unwrap(),
                 lexeme: "123n".to_string(),
             })
@@ -341,7 +360,7 @@ mod tests {
 
         assert_eq!(
             try_parse_number(&mut chars).unwrap().unwrap(),
-            NumberLiteral::BigInt(BigIntStorage {
+            NumberLiteralValue::BigInt(BigIntStorage {
                 value: num_bigint::BigInt::parse_bytes(b"-123", 10).unwrap(),
                 lexeme: "-123n".to_string(),
             })
@@ -388,7 +407,7 @@ mod tests {
         let mut chars = src.chars().peekable();
         assert_eq!(
             try_parse_number(&mut chars).unwrap().unwrap(),
-            NumberLiteral::BigInt(BigIntStorage {
+            NumberLiteralValue::BigInt(BigIntStorage {
                 value: num_bigint::BigInt::parse_bytes(b"255", 10).unwrap(),
                 lexeme: "FFn".to_string(),
             })

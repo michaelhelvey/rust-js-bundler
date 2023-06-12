@@ -1,16 +1,13 @@
 #![allow(dead_code)]
-//! Lexes Javascript string literals.
-//! See: https://tc39.es/ecma262/#sec-literals-string-literals
-
 use std::{iter::Peekable, str::Chars};
 
 use color_eyre::{eyre::eyre, Result};
-use serde::Deserialize;
+use serde::Serialize;
 
 use super::escape_chars::try_parse_escape;
 
 /// Represents a string literal token, with delimiters stripped.
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq)]
 pub struct StringLiteral {
     lexeme: String,
 }
@@ -34,10 +31,6 @@ impl From<&str> for StringLiteral {
             lexeme: value.to_string(),
         }
     }
-}
-
-fn is_line_terminator(c: char) -> bool {
-    c == '\n' || c == '\r' || c == '\u{2028}' || c == '\u{2029}'
 }
 
 /// Attempts to parse a string out of an iterator of characters.
@@ -66,7 +59,7 @@ pub fn try_parse_string(chars: &mut Peekable<Chars>) -> Result<Option<StringLite
             break 'string;
         }
 
-        if is_line_terminator(next_char) {
+        if super::utils::is_line_terminator(next_char) {
             return Err(eyre!(
                 "Unexpected line terminator while parsing string literal"
             ));
@@ -179,14 +172,5 @@ mod tests {
         let mut chars = src.chars().peekable();
 
         assert_eq!(try_parse_string(&mut chars).unwrap().unwrap(), "ABC".into());
-    }
-
-    #[test]
-    fn test_is_line_terminator() {
-        assert!(is_line_terminator('\n'));
-        assert!(is_line_terminator('\r'));
-        assert!(is_line_terminator('\u{2028}'));
-        assert!(is_line_terminator('\u{2029}'));
-        assert!(!is_line_terminator('a'));
     }
 }
