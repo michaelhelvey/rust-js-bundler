@@ -19,6 +19,7 @@ impl Comment {
 pub enum CommentType {
     Block(String),
     Line(String),
+    Hashbang(String),
 }
 
 /// Parses a line comment, assuming that the leading '//' has already been
@@ -74,6 +75,22 @@ pub fn try_parse_comment(chars: &mut Peekable<Chars>) -> Option<Comment> {
     }
 }
 
+pub fn try_parse_hashbang_comment(chars: &mut Peekable<Chars>) -> Option<Comment> {
+    let mut cloned = chars.clone();
+    match (cloned.next(), cloned.next()) {
+        (Some('#'), Some('!')) => {
+            for _ in 0..2 {
+                _ = chars.next();
+            }
+            let lexeme = chars
+                .take_while(|c| !is_line_terminator(*c))
+                .collect::<String>();
+            Some(Comment::new(CommentType::Hashbang(lexeme)))
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -103,5 +120,18 @@ mod tests {
             }
         );
         assert_eq!(chars.next().unwrap(), '\n');
+    }
+
+    #[test]
+    fn test_parse_hashbang_comment() {
+        let src = r#"#!/usr/bin/env node"#;
+        let mut chars = src.chars().peekable();
+
+        assert_eq!(
+            try_parse_hashbang_comment(&mut chars).unwrap(),
+            Comment {
+                value: CommentType::Hashbang("/usr/bin/env node".to_string())
+            }
+        );
     }
 }

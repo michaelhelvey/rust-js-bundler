@@ -2,7 +2,6 @@ use color_eyre::{eyre::eyre, Result};
 use std::{iter::Peekable, str::Chars};
 
 // TODO:
-// *) template literals
 // *) operators
 // *) regex literals
 // *) punctuators
