@@ -13,6 +13,7 @@ mod ident;
 mod num;
 mod old_number;
 mod string;
+mod template;
 mod token;
 mod utils;
 
