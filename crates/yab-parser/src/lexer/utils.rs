@@ -1,3 +1,7 @@
+/// Predicate to check if a character is a line terminator, as defined by the
+/// Ecmascript standard.
+///
+/// See: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Lexical_grammar#line_terminators
 pub fn is_line_terminator(c: char) -> bool {
     c == '\n' || c == '\r' || c == '\u{2028}' || c == '\u{2029}'
 }

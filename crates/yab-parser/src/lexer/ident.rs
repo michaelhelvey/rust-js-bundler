@@ -29,13 +29,13 @@ impl From<&str> for Identifier {
 ///
 /// Returns:
 ///
-/// * Ok(Some(Identifier)) if the iterator starts with a valid identifier.
+/// * `Ok(Some(Identifier))` if the iterator starts with a valid identifier.
 /// Stops parsing the identifier as soon as an invalid identifier character is
 /// reached.
 ///
-/// * Ok(None) if the iterator does not begin with a valid identifier character.
+/// * `Ok(None)` if the iterator does not begin with a valid identifier character.
 ///
-/// * Err if an invalid escape sequence is encountered.
+/// * `Err` if an invalid escape sequence is encountered.
 pub fn try_parse_identifier(chars: &mut Peekable<Chars>) -> Result<Option<Identifier>> {
     let mut lexeme = String::new();
 

@@ -273,12 +273,12 @@ fn parse_leading_zero_number(
 ///
 /// Returns:
 ///
-/// * Ok(Some(NumberLiteral)) - a number literal was successfully parsed out of
+/// * `Ok(Some(NumberLiteral))` - a number literal was successfully parsed out of
 /// the iterator.  The iterator has been advanced to the end of the number.
 ///
-/// * Ok(None) - the next character of the iterator did not begin a number literal.
+/// * `Ok(None)` - the next character of the iterator did not begin a number literal.
 ///
-/// * Err(Error) - the next character of the iterator began a number literal,
+/// * `Err` - the next character of the iterator began a number literal,
 /// but it was malformed or otherwise unable to be parsed.
 pub fn try_parse_number(chars: &mut Peekable<Chars>) -> Result<Option<NumberLiteralValue>> {
     let sign = match chars.peek() {
