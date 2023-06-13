@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 use color_eyre::{eyre::eyre, Result};
+use nom::AsChar;
 use serde::Serialize;
 use std::{iter::Peekable, str::Chars};
 
@@ -84,6 +85,10 @@ impl Sign {
     }
 }
 
+fn is_numeric_separator(c: char) -> bool {
+    c == '_'
+}
+
 // Attempts to parse the exponent of a scientific notation number.  Assumes that
 // the leading "e" has not yet been consumed.
 fn parse_scientific_exponent(chars: &mut Peekable<Chars>) -> Result<i64> {
@@ -156,6 +161,11 @@ fn parse_base_10(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLitera
     let mut lexeme = String::new();
 
     'number: while let Some(c) = chars.peek() {
+        if is_numeric_separator(*c) {
+            _ = chars.next();
+            continue 'number;
+        }
+
         if c.is_ascii_digit() || *c == '.' {
             lexeme.push(*c);
             _ = chars.next();
@@ -175,45 +185,36 @@ fn parse_base_10(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLitera
     }
 }
 
-fn parse_hex_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLiteralValue> {
+fn consume_while(iter: &mut Peekable<Chars>, predicate: fn(char) -> bool) -> String {
     let mut lexeme = String::new();
-    while let Some(c) = chars.peek() {
-        if c.is_ascii_hexdigit() {
+    while let Some(c) = iter.peek() {
+        if is_numeric_separator(*c) {
+            _ = iter.next();
+            continue;
+        }
+        if predicate(*c) {
             lexeme.push(*c);
-            _ = chars.next();
+            _ = iter.next();
         } else {
             break;
         }
     }
 
+    lexeme
+}
+
+fn parse_hex_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLiteralValue> {
+    let lexeme = consume_while(chars, |c| c.is_ascii_hexdigit());
     Ok(parse_maybe_big_int(chars, lexeme, 16, sign)?)
 }
 
 fn parse_bin_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLiteralValue> {
-    let mut lexeme = String::new();
-    while let Some(c) = chars.peek() {
-        if c.is_ascii_hexdigit() {
-            lexeme.push(*c);
-            _ = chars.next();
-        } else {
-            break;
-        }
-    }
-
+    let lexeme = consume_while(chars, |c| c == '0' || c == '1');
     Ok(parse_maybe_big_int(chars, lexeme, 2, sign)?)
 }
 
 fn parse_oct_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLiteralValue> {
-    let mut lexeme = String::new();
-    while let Some(c) = chars.peek() {
-        if c.is_ascii_hexdigit() {
-            lexeme.push(*c);
-            _ = chars.next();
-        } else {
-            break;
-        }
-    }
-
+    let lexeme = consume_while(chars, |c| c.is_oct_digit());
     Ok(parse_maybe_big_int(chars, lexeme, 8, sign)?)
 }
 
@@ -240,6 +241,7 @@ fn parse_leading_zero_number(
             _ = chars.next();
             parse_oct_number(chars, sign)
         }
+        Some('_') => return Err(eyre!("Numeric separator can not be used after leading 0")),
         // TODO: support switching on whether legacy octals are allowed:
         Some(c) if c.is_ascii_digit() => parse_oct_number(chars, sign),
         _ => Ok(0.into()),
@@ -433,5 +435,30 @@ mod tests {
         let src = "0123";
         let mut chars = src.chars().peekable();
         assert_eq!(try_parse_number(&mut chars).unwrap().unwrap(), 83.into());
+    }
+
+    #[test]
+    fn test_num_with_underlines() {
+        let src = "1_2_3";
+        let mut chars = src.chars().peekable();
+        assert_eq!(try_parse_number(&mut chars).unwrap().unwrap(), 123.into());
+    }
+
+    #[test]
+    fn test_hex_with_underlines() {
+        let src = "0xF_F";
+        let mut chars = src.chars().peekable();
+        assert_eq!(try_parse_number(&mut chars).unwrap().unwrap(), 255.into());
+    }
+
+    #[test]
+    fn test_hex_with_invalid_numeric_separator() {
+        let src = "0_xF_F";
+        let mut chars = src.chars().peekable();
+        let result = try_parse_number(&mut chars);
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Numeric separator can not be used after leading 0"
+        );
     }
 }
