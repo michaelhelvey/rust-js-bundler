@@ -205,16 +205,37 @@ fn consume_while(iter: &mut Peekable<Chars>, predicate: fn(char) -> bool) -> Str
 
 fn parse_hex_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLiteralValue> {
     let lexeme = consume_while(chars, |c| c.is_ascii_hexdigit());
+
+    if lexeme.is_empty() {
+        return Err(eyre!(
+            "Expected a valid hexadecimal digit after '0x' while parsing numeric literal"
+        ));
+    }
+
     Ok(parse_maybe_big_int(chars, lexeme, 16, sign)?)
 }
 
 fn parse_bin_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLiteralValue> {
     let lexeme = consume_while(chars, |c| c == '0' || c == '1');
+
+    if lexeme.is_empty() {
+        return Err(eyre!(
+            "Expected a valid binary digit after '0b' while parsing numeric literal"
+        ));
+    }
+
     Ok(parse_maybe_big_int(chars, lexeme, 2, sign)?)
 }
 
 fn parse_oct_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLiteralValue> {
     let lexeme = consume_while(chars, |c| c.is_oct_digit());
+
+    if lexeme.is_empty() {
+        return Err(eyre!(
+            "Expected a valid octal digit while parsing octal-formatted numeric literal"
+        ));
+    }
+
     Ok(parse_maybe_big_int(chars, lexeme, 8, sign)?)
 }
 
@@ -459,6 +480,39 @@ mod tests {
         assert_eq!(
             result.unwrap_err().to_string(),
             "Numeric separator can not be used after leading 0"
+        );
+    }
+
+    #[test]
+    fn test_binary_invalid_chars() {
+        let src = "0b2";
+        let mut chars = src.chars().peekable();
+        let result = try_parse_number(&mut chars);
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Expected a valid binary digit after '0b' while parsing numeric literal"
+        );
+    }
+
+    #[test]
+    fn test_octal_invalid_chars() {
+        let src = "0o8";
+        let mut chars = src.chars().peekable();
+        let result = try_parse_number(&mut chars);
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Expected a valid octal digit while parsing octal-formatted numeric literal"
+        );
+    }
+
+    #[test]
+    fn test_hex_invalid_chars() {
+        let src = "0xG";
+        let mut chars = src.chars().peekable();
+        let result = try_parse_number(&mut chars);
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Expected a valid hexadecimal digit after '0x' while parsing numeric literal"
         );
     }
 }
