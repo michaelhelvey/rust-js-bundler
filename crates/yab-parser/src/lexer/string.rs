@@ -66,7 +66,10 @@ pub fn try_parse_string(chars: &mut Peekable<Chars>) -> Result<Option<StringLite
         }
 
         if next_char == '\\' {
-            lexeme.push(try_parse_escape(chars)?);
+            match try_parse_escape(chars)? {
+                Some(escaped_char) => lexeme.push(escaped_char),
+                _ => {},
+            };
         } else {
             lexeme.push(next_char);
         }
@@ -172,5 +175,17 @@ mod tests {
         let mut chars = src.chars().peekable();
 
         assert_eq!(try_parse_string(&mut chars).unwrap().unwrap(), "ABC".into());
+    }
+
+    #[test]
+    fn test_escaped_line_character() {
+        let src = r#""hello\
+ world""#;
+        let mut chars = src.chars().peekable();
+
+        assert_eq!(
+            try_parse_string(&mut chars).unwrap().unwrap(),
+            "hello world".into()
+        );
     }
 }

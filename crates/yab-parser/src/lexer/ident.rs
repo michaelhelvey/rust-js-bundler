@@ -40,7 +40,7 @@ pub fn try_parse_identifier(chars: &mut Peekable<Chars>) -> Result<Option<Identi
     let mut lexeme = String::new();
 
     let mut at_start = true;
-    while let Some(next_char) = chars.peek() {
+    'ident: while let Some(next_char) = chars.peek() {
         let mut requires_advancing = true;
 
         let token_pred = |c: char| {
@@ -57,14 +57,16 @@ pub fn try_parse_identifier(chars: &mut Peekable<Chars>) -> Result<Option<Identi
                 requires_advancing = false;
                 let escaped_char = try_parse_escape(chars)?;
 
-                if !token_pred(escaped_char) {
-                    return Err(eyre!(
-                        "Invalid escape sequence in identifier: \\u{:04X}",
-                        escaped_char as u32
-                    ));
+                match escaped_char {
+                    Some(c) if !token_pred(c) => {
+                        return Err(eyre!(
+                            "Invalid escape sequence in identifier: \\u{:04X}",
+                            c as u32
+                        ))
+                    }
+                    Some(c) => c,
+                    _ => continue 'ident,
                 }
-
-                escaped_char
             }
             _ => *next_char,
         };

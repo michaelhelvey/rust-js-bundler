@@ -1,14 +1,20 @@
 use color_eyre::{eyre::eyre, Result};
 use std::{iter::Peekable, str::Chars};
 
+// TODO:
+// *) template literals
+// *) operators
+// *) regex literals
+// *) punctuators
+// *) hashbang comments
 mod comment;
 mod escape_chars;
+mod ident;
 mod num;
 mod old_number;
 mod string;
 mod token;
 mod utils;
-mod ident;
 
 use old_number::parse_number;
 use token::{

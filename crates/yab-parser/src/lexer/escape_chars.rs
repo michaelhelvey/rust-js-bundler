@@ -144,24 +144,31 @@ fn parse_multi_byte_escape(chars: &mut Peekable<Chars>, init: char) -> Result<ch
 ///
 /// Returns:
 ///
-/// * `Ok(char)` if the next characters in the iterator are a valid
+/// * `Ok(Some(char))` if the next characters in the iterator are a valid
 /// escape, and can be parsed into a `char`.
+///
+/// * Ok(None) if the next characters in the iterator are a valid escape, but
+/// they should be ignored (e.g. a newline escape sequence).
 ///
 /// * `Err` if the next characters in the iterator are an escape sequence, but
 /// cannot be parsed into a `char`.
-pub fn try_parse_escape(chars: &mut Peekable<Chars>) -> Result<char> {
+pub fn try_parse_escape(chars: &mut Peekable<Chars>) -> Result<Option<char>> {
     // Start by trying to match against a "basic" escape sequence, before trying
     // to parse multi-byte sequences like octals, unicode, control codes, etc.
     match chars.next() {
-        Some('b') => Ok('\u{0008}'),
-        Some('f') => Ok('\u{000c}'),
-        Some('n') => Ok('\u{000a}'),
-        Some('r') => Ok('\u{000d}'),
-        Some('t') => Ok('\u{0009}'),
-        Some('v') => Ok('\u{000b}'),
-        Some('"') => Ok('\u{0022}'),
-        Some('\'') => Ok('\u{0027}'),
-        Some(c) => parse_multi_byte_escape(chars, c),
+        Some('b') => Ok(Some('\u{0008}')),
+        Some('f') => Ok(Some('\u{000c}')),
+        Some('n') => Ok(Some('\u{000a}')),
+        Some('r') => Ok(Some('\u{000d}')),
+        Some('t') => Ok(Some('\u{0009}')),
+        Some('v') => Ok(Some('\u{000b}')),
+        Some('"') => Ok(Some('\u{0022}')),
+        Some('\'') => Ok(Some('\u{0027}')),
+        Some('\u{000A}') => Ok(None),
+        Some('\u{000D}') => Ok(None),
+        Some('\u{2028}') => Ok(None),
+        Some('\u{2029}') => Ok(None),
+        Some(c) => parse_multi_byte_escape(chars, c).map(|v| Some(v)),
         None => Err(eyre!("Unexpected EOF while parsing escape sequence")),
     }
 }
@@ -173,14 +180,14 @@ mod tests {
     #[test]
     fn test_new_line_escape_sequence() {
         let mut chars = r#"n"#.chars().peekable();
-        assert_eq!(try_parse_escape(&mut chars).unwrap(), '\n');
+        assert_eq!(try_parse_escape(&mut chars).unwrap().unwrap(), '\n');
     }
 
     #[test]
     fn test_non_escape_chars_interpreted_as_identity() {
         let src = r#"a"#;
         let mut chars = src.chars().peekable();
-        assert_eq!(try_parse_escape(&mut chars).unwrap(), 'a');
+        assert_eq!(try_parse_escape(&mut chars).unwrap().unwrap(), 'a');
     }
 
     #[test]
@@ -200,7 +207,7 @@ mod tests {
 
         for (src, expected) in js_single_escapes {
             let mut chars = src.chars().peekable();
-            assert_eq!(try_parse_escape(&mut chars).unwrap(), expected);
+            assert_eq!(try_parse_escape(&mut chars).unwrap().unwrap(), expected);
         }
     }
 
@@ -208,7 +215,7 @@ mod tests {
     fn test_octal_escape_sequence() {
         let src = r#"0"#;
         let mut chars = src.chars().peekable();
-        assert_eq!(try_parse_escape(&mut chars).unwrap(), '\u{0000}');
+        assert_eq!(try_parse_escape(&mut chars).unwrap().unwrap(), '\u{0000}');
     }
 
     #[test]
@@ -232,7 +239,7 @@ mod tests {
     fn test_octal_escape_sequence_does_not_eat_trailing_characters() {
         let src = r#"39"#;
         let mut chars = src.chars().peekable();
-        assert_eq!(try_parse_escape(&mut chars).unwrap(), '\u{0003}');
+        assert_eq!(try_parse_escape(&mut chars).unwrap().unwrap(), '\u{0003}');
         assert_eq!(chars.next().unwrap(), '9');
     }
 
@@ -276,14 +283,14 @@ mod tests {
     fn test_valid_hex_escape_sequence() {
         let src = r#"xFF"#;
         let mut chars = src.chars().peekable();
-        assert_eq!(try_parse_escape(&mut chars).unwrap(), '\u{00ff}');
+        assert_eq!(try_parse_escape(&mut chars).unwrap().unwrap(), '\u{00ff}');
     }
 
     #[test]
     fn test_unicode_escape_sequence_with_braces() {
         let src = r#"u{1f600}"#;
         let mut chars = src.chars().peekable();
-        assert_eq!(try_parse_escape(&mut chars).unwrap(), '😀');
+        assert_eq!(try_parse_escape(&mut chars).unwrap().unwrap(), '😀');
         assert_eq!(chars.next(), None)
     }
 
@@ -291,7 +298,7 @@ mod tests {
     fn test_unicode_escape_sequence_without_braces() {
         let src = r#"u1f600"#;
         let mut chars = src.chars().peekable();
-        assert_eq!(try_parse_escape(&mut chars).unwrap(), 'ὠ');
+        assert_eq!(try_parse_escape(&mut chars).unwrap().unwrap(), 'ὠ');
         assert_eq!(chars.next().unwrap(), '0');
     }
 
@@ -332,7 +339,7 @@ mod tests {
     fn test_unicode_escape_does_not_eat_trailing_chars() {
         let src = r#"u00410"#;
         let mut chars = src.chars().peekable();
-        assert_eq!(try_parse_escape(&mut chars).unwrap(), 'A');
+        assert_eq!(try_parse_escape(&mut chars).unwrap().unwrap(), 'A');
         assert_eq!(chars.next().unwrap(), '0');
     }
 }
