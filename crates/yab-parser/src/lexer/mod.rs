@@ -1,14 +1,13 @@
 use color_eyre::{eyre::eyre, Result};
 use std::{iter::Peekable, str::Chars};
 
-// TODO:
-// *) operators
-// *) punctuators
 mod comment;
 mod escape_chars;
 mod ident;
 mod num;
 mod old_number;
+mod operator;
+mod punctuation;
 mod regex;
 mod string;
 mod template;
