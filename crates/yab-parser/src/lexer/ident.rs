@@ -109,6 +109,10 @@ pub fn try_parse_identifier(chars: &mut Peekable<Chars>) -> Result<Option<IdentP
         at_start = false;
     }
 
+    if lexeme.is_empty() {
+        return Ok(None);
+    }
+
     match KeywordType::try_from(lexeme.as_ref()) {
         Ok(keyword_type) => Ok(Some(IdentParseResult::Keyword(Keyword::new(keyword_type)))),
         _ => Ok(Some(IdentParseResult::Identifier(lexeme.into()))),
