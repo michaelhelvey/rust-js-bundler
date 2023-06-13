@@ -2,6 +2,7 @@
 use std::{iter::Peekable, str::Chars};
 
 use color_eyre::{eyre::eyre, Result};
+use serde::Serialize;
 
 use super::utils::is_line_terminator;
 
@@ -9,10 +10,16 @@ use super::utils::is_line_terminator;
 /// regex, or evaluating it, we don't need to parse the pattern, just the
 /// pattern + the flags so that we can compile the literal into a function call
 /// later if we want.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Serialize, PartialEq)]
 pub struct RegexLiteral {
     pattern: String,
     flags: String,
+}
+
+impl RegexLiteral {
+    pub fn new(pattern: String, flags: String) -> Self {
+        Self { pattern, flags }
+    }
 }
 
 /// Parses a regex pattern, assuming that the leading '/' has been consumed.
@@ -39,14 +46,16 @@ fn parse_regex_pattern(chars: &mut Peekable<Chars>) -> Result<String> {
 fn parse_regex_flags(chars: &mut Peekable<Chars>) -> Result<String> {
     let mut lexeme = String::new();
 
-    while let Some(next_char) = chars.next() {
+    while let Some(next_char) = chars.peek() {
         match next_char {
             'g' | 'i' | 'm' | 's' | 'u' | 'y' => {
-                lexeme.push(next_char);
+                lexeme.push(*next_char);
+                _ = chars.next();
             }
             c if c.is_whitespace() => return Ok(lexeme),
             ';' => return Ok(lexeme),
-            c => return Err(eyre!("Invalid regular expression flag '{}'", c)),
+            c if c.is_alphabetic() => return Err(eyre!("Invalid regular expression flag '{}'", c)),
+            c => return Ok(lexeme),
         }
     }
 
@@ -130,5 +139,19 @@ mod tests {
             result.unwrap_err().to_string(),
             "Unexpected line terminator while parsing regular expression"
         );
+    }
+
+    #[test]
+    fn test_regex_flags_do_not_eat_next_chars() {
+        let mut chars = "/foo/g.".chars().peekable();
+        let result = try_parse_regex_literal(&mut chars).unwrap().unwrap();
+        assert_eq!(
+            result,
+            RegexLiteral {
+                pattern: "foo".to_string(),
+                flags: "g".to_string(),
+            }
+        );
+        assert_eq!(chars.next(), Some('.'));
     }
 }

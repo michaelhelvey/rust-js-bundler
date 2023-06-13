@@ -21,6 +21,9 @@ pub enum OperatorType {
     #[token(lexeme = "===")]
     #[strum(serialize = "===")]
     StrictEquality,
+    #[token(lexeme = "&&")]
+    #[strum(serialize = "&&")]
+    LogicalAnd,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -52,6 +55,7 @@ mod tests {
             ("=", OperatorType::Assignment),
             ("==", OperatorType::LooseEquality),
             ("===", OperatorType::StrictEquality),
+            ("&&", OperatorType::LogicalAnd),
         ];
 
         for op in operators {

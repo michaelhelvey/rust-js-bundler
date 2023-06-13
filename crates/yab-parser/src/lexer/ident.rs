@@ -10,6 +10,26 @@ use super::escape_chars::try_parse_escape;
 pub enum IdentParseResult {
     Identifier(Identifier),
     Keyword(Keyword),
+    ValueLiteral(ValueLiteral),
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub struct ValueLiteral {
+    kind: ValueLiteralType,
+}
+
+impl ValueLiteral {
+    pub fn new(kind: ValueLiteralType) -> Self {
+        Self { kind }
+    }
+}
+
+#[derive(Debug, Serialize, PartialEq, EnumString)]
+#[strum(serialize_all = "snake_case")]
+pub enum ValueLiteralType {
+    True,
+    False,
+    Null,
 }
 
 #[derive(Debug, Serialize, PartialEq, EnumString)]
@@ -113,14 +133,23 @@ pub fn try_parse_identifier(chars: &mut Peekable<Chars>) -> Result<Option<IdentP
         return Ok(None);
     }
 
-    match KeywordType::try_from(lexeme.as_ref()) {
-        Ok(keyword_type) => Ok(Some(IdentParseResult::Keyword(Keyword::new(keyword_type)))),
-        _ => Ok(Some(IdentParseResult::Identifier(lexeme.into()))),
+    if let Ok(keyword_type) = KeywordType::try_from(lexeme.as_str()) {
+        return Ok(Some(IdentParseResult::Keyword(Keyword::new(keyword_type))));
     }
+
+    if let Ok(value_type) = ValueLiteralType::try_from(lexeme.as_str()) {
+        return Ok(Some(IdentParseResult::ValueLiteral(ValueLiteral::new(
+            value_type,
+        ))));
+    }
+
+    Ok(Some(IdentParseResult::Identifier(lexeme.into())))
 }
 
 #[cfg(test)]
 mod tests {
+    use serde::de::value;
+
     use super::*;
 
     #[test]
@@ -208,5 +237,22 @@ mod tests {
         assert_eq!(chars.next().unwrap(), ' ');
 
         Ok(())
+    }
+
+    #[test]
+    fn test_parse_value_types() {
+        let value_literals = vec![
+            (ValueLiteralType::Null, "null"),
+            (ValueLiteralType::True, "true"),
+            (ValueLiteralType::False, "false"),
+        ];
+
+        for (value_type, src) in value_literals {
+            let mut chars = src.chars().peekable();
+            assert_eq!(
+                try_parse_identifier(&mut chars).unwrap().unwrap(),
+                IdentParseResult::ValueLiteral(ValueLiteral::new(value_type))
+            );
+        }
     }
 }

@@ -1,6 +1,6 @@
 extern crate proc_macro;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
@@ -24,6 +24,7 @@ fn has_prefix_lookup_derive_inner(ast: &DeriveInput) -> syn::Result<TokenStream>
         }
     };
 
+    // maps from identifiers (e.g. "Plus") to token options (e.g. lexeme: "+")
     let mut member_table = HashMap::<String, TokenOptions>::new();
 
     for variant in variants {
@@ -55,26 +56,35 @@ fn has_prefix_lookup_derive_inner(ast: &DeriveInput) -> syn::Result<TokenStream>
         }
     }
 
-    let mut phf_map_arms: Vec<TokenStream> = Vec::new();
+    let mut prefixes_to_vecs: HashMap<&str, Vec<&str>> = HashMap::new();
 
     // For each character in each lexeme, iterate over all lexemes in the enum,
     // and generate a list of other lexemes that could start with that prefix.
     for value in member_table.values() {
-        let mut lexemes_with_prefix: Vec<&str> = Vec::new();
         let lexeme = &value.lexeme;
 
-        for other_value in member_table.values() {
-            if other_value.lexeme.starts_with(lexeme) {
-                lexemes_with_prefix.push(&other_value.lexeme);
+        for i in 0..lexeme.len() {
+            let mut lexemes_with_prefix: Vec<&str> = Vec::new();
+            let prefix = &lexeme[0..i + 1];
+            for other_value in member_table.values() {
+                if other_value.lexeme.starts_with(prefix) {
+                    lexemes_with_prefix.push(&other_value.lexeme);
+                }
+            }
+
+            if !lexemes_with_prefix.is_empty() {
+                prefixes_to_vecs.insert(prefix, lexemes_with_prefix);
             }
         }
+    }
 
-        if !lexemes_with_prefix.is_empty() {
-            let arm = quote! {
-                #lexeme => &[#(#lexemes_with_prefix),*]
-            };
-            phf_map_arms.push(arm);
-        }
+    let mut phf_map_arms: Vec<TokenStream> = Vec::new();
+
+    for (key, value) in prefixes_to_vecs.iter() {
+        let arm = quote! {
+            #key => &[#(#value),*]
+        };
+        phf_map_arms.push(arm);
     }
 
     Ok(quote! {

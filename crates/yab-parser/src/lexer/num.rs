@@ -4,9 +4,15 @@ use nom::AsChar;
 use serde::Serialize;
 use std::{iter::Peekable, str::Chars};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, PartialEq, Serialize)]
 pub struct NumberLiteral {
     pub value: NumberLiteralValue,
+}
+
+impl NumberLiteral {
+    pub fn new(value: NumberLiteralValue) -> Self {
+        Self { value }
+    }
 }
 
 #[derive(Debug, PartialEq, Serialize)]

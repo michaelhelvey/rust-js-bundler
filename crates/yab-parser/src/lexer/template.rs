@@ -23,12 +23,12 @@ impl TemplateLiteralString {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 pub struct TemplateLiteralExprOpen {
     lexeme: &'static str,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 pub struct TemplateLiteralExprClose {
     lexeme: &'static str,
 }
