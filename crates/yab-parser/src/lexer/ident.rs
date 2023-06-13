@@ -2,8 +2,34 @@
 use color_eyre::{eyre::eyre, Result};
 use serde::Serialize;
 use std::{iter::Peekable, str::Chars};
+use strum_macros::EnumString;
 
 use super::escape_chars::try_parse_escape;
+
+#[derive(Debug, PartialEq)]
+pub enum IdentParseResult {
+    Identifier(Identifier),
+    Keyword(Keyword),
+}
+
+#[derive(Debug, Serialize, PartialEq, EnumString)]
+#[strum(serialize_all = "snake_case")]
+pub enum KeywordType {
+    Const,
+    Return,
+    Function,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub struct Keyword {
+    kind: KeywordType,
+}
+
+impl Keyword {
+    pub fn new(kind: KeywordType) -> Self {
+        Self { kind }
+    }
+}
 
 #[derive(Debug, PartialEq, Serialize)]
 pub struct Identifier {
@@ -36,7 +62,7 @@ impl From<&str> for Identifier {
 /// * `Ok(None)` if the iterator does not begin with a valid identifier character.
 ///
 /// * `Err` if an invalid escape sequence is encountered.
-pub fn try_parse_identifier(chars: &mut Peekable<Chars>) -> Result<Option<Identifier>> {
+pub fn try_parse_identifier(chars: &mut Peekable<Chars>) -> Result<Option<IdentParseResult>> {
     let mut lexeme = String::new();
 
     let mut at_start = true;
@@ -83,7 +109,10 @@ pub fn try_parse_identifier(chars: &mut Peekable<Chars>) -> Result<Option<Identi
         at_start = false;
     }
 
-    Ok(Some(lexeme.into()))
+    match KeywordType::try_from(lexeme.as_ref()) {
+        Ok(keyword_type) => Ok(Some(IdentParseResult::Keyword(Keyword::new(keyword_type)))),
+        _ => Ok(Some(IdentParseResult::Identifier(lexeme.into()))),
+    }
 }
 
 #[cfg(test)]
@@ -94,9 +123,10 @@ mod tests {
     fn test_parse_simple_identifier() {
         let src = "hello";
         let mut chars = src.chars().peekable();
+
         assert_eq!(
-            try_parse_identifier(&mut chars).unwrap(),
-            Some("hello".into())
+            try_parse_identifier(&mut chars).unwrap().unwrap(),
+            IdentParseResult::Identifier(Identifier::from("hello"))
         );
     }
 
@@ -105,8 +135,8 @@ mod tests {
         let src = "_hello";
         let mut chars = src.chars().peekable();
         assert_eq!(
-            try_parse_identifier(&mut chars).unwrap(),
-            Some("_hello".into())
+            try_parse_identifier(&mut chars).unwrap().unwrap(),
+            IdentParseResult::Identifier(Identifier::from("_hello"))
         );
     }
 
@@ -115,8 +145,8 @@ mod tests {
         let src = "_hello123";
         let mut chars = src.chars().peekable();
         assert_eq!(
-            try_parse_identifier(&mut chars).unwrap(),
-            Some("_hello123".into())
+            try_parse_identifier(&mut chars).unwrap().unwrap(),
+            IdentParseResult::Identifier(Identifier::from("_hello123"))
         );
     }
 
@@ -125,8 +155,8 @@ mod tests {
         let src = r#"\u0041BC"#;
         let mut chars = src.chars().peekable();
         assert_eq!(
-            try_parse_identifier(&mut chars).unwrap(),
-            Some("ABC".into())
+            try_parse_identifier(&mut chars).unwrap().unwrap(),
+            IdentParseResult::Identifier(Identifier::from("ABC"))
         );
     }
 
@@ -135,8 +165,8 @@ mod tests {
         let src = r#"A\u0042C"#;
         let mut chars = src.chars().peekable();
         assert_eq!(
-            try_parse_identifier(&mut chars).unwrap(),
-            Some("ABC".into())
+            try_parse_identifier(&mut chars).unwrap().unwrap(),
+            IdentParseResult::Identifier(Identifier::from("ABC"))
         );
     }
 
@@ -157,9 +187,22 @@ mod tests {
         let src = r#"AB\u0043 "#;
         let mut chars = src.chars().peekable();
         assert_eq!(
-            try_parse_identifier(&mut chars).unwrap(),
-            Some("ABC".into())
+            try_parse_identifier(&mut chars).unwrap().unwrap(),
+            IdentParseResult::Identifier(Identifier::from("ABC"))
         );
         assert_eq!(chars.next().unwrap(), ' ');
+    }
+
+    #[test]
+    fn test_keyword() -> Result<()> {
+        let src = "const a";
+        let mut chars = src.chars().peekable();
+        assert_eq!(
+            try_parse_identifier(&mut chars).unwrap().unwrap(),
+            IdentParseResult::Keyword(Keyword::new("const".try_into()?))
+        );
+        assert_eq!(chars.next().unwrap(), ' ');
+
+        Ok(())
     }
 }
