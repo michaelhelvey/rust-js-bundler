@@ -144,11 +144,8 @@ fn parse_multi_byte_escape(chars: &mut Peekable<Chars>, init: char) -> Result<ch
 ///
 /// Returns:
 ///
-/// * `Ok(Some(char))` if the next characters in the iterator are a valid
+/// * `Ok(char)` if the next characters in the iterator are a valid
 /// escape, and can be parsed into a `char`.
-///
-/// * `Ok(None)` if the next characters in the iterator are not a valid escape
-/// sequence.
 ///
 /// * `Err` if the next characters in the iterator are an escape sequence, but
 /// cannot be parsed into a `char`.
@@ -329,5 +326,13 @@ mod tests {
             result.unwrap_err().to_string(),
             "Invalid hexadecimal escape sequence"
         );
+    }
+
+    #[test]
+    fn test_unicode_escape_does_not_eat_trailing_chars() {
+        let src = r#"u00410"#;
+        let mut chars = src.chars().peekable();
+        assert_eq!(try_parse_escape(&mut chars).unwrap(), 'A');
+        assert_eq!(chars.next().unwrap(), '0');
     }
 }

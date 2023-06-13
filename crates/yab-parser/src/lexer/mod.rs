@@ -8,6 +8,7 @@ mod old_number;
 mod string;
 mod token;
 mod utils;
+mod ident;
 
 use old_number::parse_number;
 use token::{
