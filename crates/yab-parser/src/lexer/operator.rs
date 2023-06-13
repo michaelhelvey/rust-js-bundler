@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use std::{iter::Peekable, str::Chars};
 
 use super::utils::{try_parse_from_prefix_lookup, HasPrefixLookup};
@@ -38,10 +37,7 @@ impl Operator {
 }
 
 pub fn try_parse_operator(chars: &mut Peekable<Chars>) -> Option<Operator> {
-    match try_parse_from_prefix_lookup::<OperatorType>(chars) {
-        Some(operator_type) => Some(Operator::new(operator_type)),
-        None => None,
-    }
+    try_parse_from_prefix_lookup::<OperatorType>(chars).map(Operator::new)
 }
 
 #[cfg(test)]

@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use color_eyre::{eyre::eyre, Result};
 use serde::Serialize;
 use std::{iter::Peekable, str::Chars};
@@ -148,7 +147,6 @@ pub fn try_parse_identifier(chars: &mut Peekable<Chars>) -> Result<Option<IdentP
 
 #[cfg(test)]
 mod tests {
-    use serde::de::value;
 
     use super::*;
 

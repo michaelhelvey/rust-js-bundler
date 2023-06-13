@@ -1,5 +1,4 @@
 use color_eyre::{eyre::eyre, Result};
-use num_traits::Num;
 use serde::Serialize;
 
 use self::{
@@ -47,8 +46,15 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>> {
     let mut template_depth = 0;
 
     'outer: loop {
-        if let None = chars.peek() {
+        if chars.peek().is_none() {
             break;
+        }
+
+        if tokens.is_empty() {
+            if let Some(comment) = comment::try_parse_hashbang_comment(&mut chars) {
+                tokens.push(Token::Comment(comment));
+                continue 'outer;
+            }
         }
 
         if let Some(next_char) = chars.peek() {
@@ -69,12 +75,9 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>> {
             template_depth += 1;
             tokens.push(Token::TemplateLiteralString(template_content));
 
-            match template_expr_open {
-                Some(template_expr_open) => {
-                    tokens.push(Token::TemplateLiteralExprOpen(template_expr_open));
-                }
-                _ => (),
-            };
+            if let Some(template_expr_open) = template_expr_open {
+                tokens.push(Token::TemplateLiteralExprOpen(template_expr_open));
+            }
 
             continue 'outer;
         }
@@ -103,13 +106,11 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>> {
                 tokens.push(Token::TemplateLiteralExprClose(expr_close));
                 tokens.push(Token::TemplateLiteralString(template_content));
 
-                match expr_open {
-                    Some(expr_open) => {
-                        template_depth += 1;
-                        tokens.push(Token::TemplateLiteralExprOpen(expr_open));
-                    }
-                    _ => (),
-                };
+                if let Some(expr_open) = expr_open {
+                    template_depth += 1;
+                    tokens.push(Token::TemplateLiteralExprOpen(expr_open));
+                }
+
                 continue 'outer;
             }
         }

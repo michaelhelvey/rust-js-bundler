@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use std::{iter::Peekable, str::Chars};
 
 use color_eyre::{eyre::eyre, Result};
@@ -66,10 +65,9 @@ pub fn try_parse_string(chars: &mut Peekable<Chars>) -> Result<Option<StringLite
         }
 
         if next_char == '\\' {
-            match try_parse_escape(chars)? {
-                Some(escaped_char) => lexeme.push(escaped_char),
-                _ => {},
-            };
+            if let Some(escaped_char) = try_parse_escape(chars)? {
+                lexeme.push(escaped_char);
+            }
         } else {
             lexeme.push(next_char);
         }

@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use color_eyre::{eyre::eyre, Result};
 use nom::AsChar;
 use serde::Serialize;
@@ -133,18 +132,15 @@ fn parse_maybe_big_int(
     base: u32,
     sign: Sign,
 ) -> Result<NumberLiteralValue> {
-    let is_big_int = match chars.peek() {
-        Some('n') => true,
-        _ => false,
-    };
+    let is_big_int = matches!(chars.peek(), Some('n'));
 
     match is_big_int {
         true => {
             _ = chars.next();
-            match sign {
-                Sign::Negative => lexeme.insert(0, '-'),
-                _ => {}
+            if let Sign::Negative = sign {
+                lexeme.insert(0, '-');
             }
+
             let value = num_bigint::BigInt::parse_bytes(lexeme.as_bytes(), base)
                 .ok_or(eyre!("failed to parse '{}' into BigInt", lexeme))?;
             // TODO: write a "pretty formatter" for big int based on the base,
@@ -218,7 +214,7 @@ fn parse_hex_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLit
         ));
     }
 
-    Ok(parse_maybe_big_int(chars, lexeme, 16, sign)?)
+    parse_maybe_big_int(chars, lexeme, 16, sign)
 }
 
 fn parse_bin_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLiteralValue> {
@@ -230,7 +226,7 @@ fn parse_bin_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLit
         ));
     }
 
-    Ok(parse_maybe_big_int(chars, lexeme, 2, sign)?)
+    parse_maybe_big_int(chars, lexeme, 2, sign)
 }
 
 fn parse_oct_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLiteralValue> {
@@ -242,7 +238,7 @@ fn parse_oct_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLit
         ));
     }
 
-    Ok(parse_maybe_big_int(chars, lexeme, 8, sign)?)
+    parse_maybe_big_int(chars, lexeme, 8, sign)
 }
 
 /// Attempts to parse a number out of a lexeme that begins with a leading "0".
@@ -268,7 +264,7 @@ fn parse_leading_zero_number(
             _ = chars.next();
             parse_oct_number(chars, sign)
         }
-        Some('_') => return Err(eyre!("Numeric separator can not be used after leading 0")),
+        Some('_') => Err(eyre!("Numeric separator can not be used after leading 0")),
         // TODO: support switching on whether legacy octals are allowed:
         Some(c) if c.is_ascii_digit() => parse_oct_number(chars, sign),
         _ => Ok(0.into()),
@@ -293,9 +289,9 @@ pub fn try_parse_number(chars: &mut Peekable<Chars>) -> Result<Option<NumberLite
     };
 
     match chars.peek() {
-        Some(c) if c.is_ascii_digit() && *c != '0' => parse_base_10(chars, sign).map(|v| Some(v)),
+        Some(c) if c.is_ascii_digit() && *c != '0' => parse_base_10(chars, sign).map(Some),
         Some(c) if c.is_ascii_digit() && *c == '0' => {
-            parse_leading_zero_number(chars, sign).map(|v| Some(v))
+            parse_leading_zero_number(chars, sign).map(Some)
         }
         _ => Ok(None),
     }

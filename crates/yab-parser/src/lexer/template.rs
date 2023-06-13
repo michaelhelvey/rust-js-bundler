@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use color_eyre::{eyre::eyre, Result};
 use serde::Serialize;
 use std::{iter::Peekable, str::Chars};
@@ -114,9 +112,8 @@ pub fn parse_template_literal_string(
             },
             '\\' => {
                 // parse escape sequence
-                match try_parse_escape(chars)? {
-                    Some(escaped_char) => lexeme.push(escaped_char),
-                    _ => {}
+                if let Some(escaped_char) = try_parse_escape(chars)? {
+                    lexeme.push(escaped_char);
                 }
             }
             c => lexeme.push(c),
@@ -151,7 +148,7 @@ pub fn try_parse_template_literal_start(
     match chars.peek() {
         Some('`') => {
             _ = chars.next();
-            parse_template_literal_string(chars).map(|v| Some(v))
+            parse_template_literal_string(chars).map(Some)
         }
         _ => Ok(None),
     }

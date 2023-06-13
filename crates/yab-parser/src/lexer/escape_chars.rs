@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Parses Javascript character escape sequences.
 //!
 //! Note that the parser does not parse RegExp literals into their component
@@ -98,7 +97,7 @@ fn parse_unicode_escape_sequence(chars: &mut Peekable<Chars>) -> Result<char> {
             return Err(eyre!("Undefined Unicode code-point"));
         }
 
-        return std::char::from_u32(value).ok_or(eyre!("Invalid Unicode code-point"));
+        std::char::from_u32(value).ok_or(eyre!("Invalid Unicode code-point"))
     } else {
         let mut value = 0;
 
@@ -115,7 +114,7 @@ fn parse_unicode_escape_sequence(chars: &mut Peekable<Chars>) -> Result<char> {
             return Err(eyre!("Undefined Unicode code-point"));
         }
 
-        return std::char::from_u32(value).ok_or(eyre!("Invalid Unicode code-point"));
+        std::char::from_u32(value).ok_or(eyre!("Invalid Unicode code-point"))
     }
 }
 
@@ -124,15 +123,15 @@ fn parse_unicode_escape_sequence(chars: &mut Peekable<Chars>) -> Result<char> {
 /// as a fall through if no other matches were found.
 fn parse_multi_byte_escape(chars: &mut Peekable<Chars>, init: char) -> Result<char> {
     if init.is_oct_digit() {
-        return Ok(parse_octal_escape_sequence(chars, init)?);
+        return parse_octal_escape_sequence(chars, init);
     }
 
     if init == 'x' {
-        return Ok(parse_hex_escape_sequence(chars)?);
+        return parse_hex_escape_sequence(chars);
     }
 
     if init == 'u' {
-        return Ok(parse_unicode_escape_sequence(chars)?);
+        return parse_unicode_escape_sequence(chars);
     }
 
     Ok(init)
@@ -168,7 +167,7 @@ pub fn try_parse_escape(chars: &mut Peekable<Chars>) -> Result<Option<char>> {
         Some('\u{000D}') => Ok(None),
         Some('\u{2028}') => Ok(None),
         Some('\u{2029}') => Ok(None),
-        Some(c) => parse_multi_byte_escape(chars, c).map(|v| Some(v)),
+        Some(c) => parse_multi_byte_escape(chars, c).map(Some),
         None => Err(eyre!("Unexpected EOF while parsing escape sequence")),
     }
 }

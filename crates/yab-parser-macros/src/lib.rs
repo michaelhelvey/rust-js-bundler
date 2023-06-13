@@ -1,6 +1,6 @@
 extern crate proc_macro;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 
 use proc_macro2::{Span, TokenStream};
 use quote::quote;

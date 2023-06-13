@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use std::{iter::Peekable, str::Chars};
 
 use super::utils::{try_parse_from_prefix_lookup, HasPrefixLookup};
@@ -40,10 +39,7 @@ impl Punctuation {
 }
 
 pub fn try_parse_punctuation(chars: &mut Peekable<Chars>) -> Option<Punctuation> {
-    match try_parse_from_prefix_lookup::<PunctuationType>(chars) {
-        Some(punct_type) => Some(Punctuation::new(punct_type)),
-        None => None,
-    }
+    try_parse_from_prefix_lookup::<PunctuationType>(chars).map(Punctuation::new)
 }
 
 #[cfg(test)]

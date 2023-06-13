@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use std::{iter::Peekable, str::Chars};
 
 use color_eyre::{eyre::eyre, Result};
@@ -28,7 +27,7 @@ impl RegexLiteral {
 /// that.
 fn parse_regex_pattern(chars: &mut Peekable<Chars>) -> Result<String> {
     let mut lexeme = String::new();
-    while let Some(next_char) = chars.next() {
+    for next_char in chars.by_ref() {
         match next_char {
             '/' => return Ok(lexeme),
             c if is_line_terminator(c) => {
@@ -55,7 +54,7 @@ fn parse_regex_flags(chars: &mut Peekable<Chars>) -> Result<String> {
             c if c.is_whitespace() => return Ok(lexeme),
             ';' => return Ok(lexeme),
             c if c.is_alphabetic() => return Err(eyre!("Invalid regular expression flag '{}'", c)),
-            c => return Ok(lexeme),
+            _c => return Ok(lexeme),
         }
     }
 
@@ -85,7 +84,7 @@ pub fn try_parse_regex_literal(chars: &mut Peekable<Chars>) -> Result<Option<Reg
 
             Ok(Some(RegexLiteral { pattern, flags }))
         }
-        _ => return Ok(None),
+        _ => Ok(None),
     }
 }
 
