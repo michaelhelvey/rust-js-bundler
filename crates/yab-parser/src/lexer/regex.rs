@@ -1,6 +1,6 @@
 use std::{iter::Peekable, str::Chars};
 
-use color_eyre::{eyre::eyre, Result};
+use miette::{miette, Result};
 use serde::Serialize;
 
 use super::utils::is_line_terminator;
@@ -31,7 +31,7 @@ fn parse_regex_pattern(chars: &mut Peekable<Chars>) -> Result<String> {
         match next_char {
             '/' => return Ok(lexeme),
             c if is_line_terminator(c) => {
-                return Err(eyre!(
+                return Err(miette!(
                     "Unexpected line terminator while parsing regular expression"
                 ))
             }
@@ -39,7 +39,7 @@ fn parse_regex_pattern(chars: &mut Peekable<Chars>) -> Result<String> {
         }
     }
 
-    Err(eyre!("Unterminated regex literal"))
+    Err(miette!("Unterminated regex literal"))
 }
 
 fn parse_regex_flags(chars: &mut Peekable<Chars>) -> Result<String> {
@@ -53,7 +53,9 @@ fn parse_regex_flags(chars: &mut Peekable<Chars>) -> Result<String> {
             }
             c if c.is_whitespace() => return Ok(lexeme),
             ';' => return Ok(lexeme),
-            c if c.is_alphabetic() => return Err(eyre!("Invalid regular expression flag '{}'", c)),
+            c if c.is_alphabetic() => {
+                return Err(miette!("Invalid regular expression flag '{}'", c))
+            }
             _c => return Ok(lexeme),
         }
     }

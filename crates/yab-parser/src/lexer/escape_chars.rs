@@ -6,7 +6,7 @@
 //!
 //! See: https://tc39.es/ecma262/#prod-EscapeSequence
 
-use color_eyre::{eyre::eyre, Result};
+use miette::{miette, Result};
 use nom::AsChar;
 use std::{iter::Peekable, str::Chars};
 
@@ -17,7 +17,7 @@ use std::{iter::Peekable, str::Chars};
 /// *Note*:  The caller is responsible for ensuring that the initial character
 /// is a valid octal digit.
 fn parse_octal_escape_sequence(chars: &mut Peekable<Chars>, init: char) -> Result<char> {
-    let mut value = init.to_digit(8).ok_or(eyre!(
+    let mut value = init.to_digit(8).ok_or(miette!(
         "internal parser error: caller must check that '{}' is a valid octal",
         init
     ))?;
@@ -32,7 +32,7 @@ fn parse_octal_escape_sequence(chars: &mut Peekable<Chars>, init: char) -> Resul
     }
 
     if value > 0o377 {
-        return Err(eyre!(
+        return Err(miette!(
             "invalid octal escape sequence: out of range: {}",
             value,
         ));
@@ -49,7 +49,7 @@ fn parse_hex_escape_sequence(chars: &mut Peekable<Chars>) -> Result<char> {
 
     let mut value = match chars.next() {
         Some(c) if c.is_hex_digit() => c.to_digit(16).unwrap(),
-        _ => return Err(eyre!(invalid_err_msg)),
+        _ => return Err(miette!(invalid_err_msg)),
     };
 
     match chars.peek() {
@@ -57,10 +57,10 @@ fn parse_hex_escape_sequence(chars: &mut Peekable<Chars>) -> Result<char> {
             // safety:  we just checked the value exists and that it's a valid hex digit.
             value = value * 16 + chars.next().unwrap().to_digit(16).unwrap()
         }
-        _ => return Err(eyre!(invalid_err_msg)),
+        _ => return Err(miette!(invalid_err_msg)),
     };
 
-    std::char::from_u32(value).ok_or(eyre!(invalid_err_msg))
+    std::char::from_u32(value).ok_or(miette!(invalid_err_msg))
 }
 
 /// Attempts to parse a unicode escape sequence into a single `char`, returning
@@ -87,34 +87,34 @@ fn parse_unicode_escape_sequence(chars: &mut Peekable<Chars>) -> Result<char> {
                     _ = chars.next();
                     break 'unicode;
                 }
-                _ => return Err(eyre!("Invalid hexadecimal escape sequence")),
+                _ => return Err(miette!("Invalid hexadecimal escape sequence")),
             };
 
             value = value * 16 + next_digit.to_digit(16).unwrap();
         }
 
         if value > 0x10ffff {
-            return Err(eyre!("Undefined Unicode code-point"));
+            return Err(miette!("Undefined Unicode code-point"));
         }
 
-        std::char::from_u32(value).ok_or(eyre!("Invalid Unicode code-point"))
+        std::char::from_u32(value).ok_or(miette!("Invalid Unicode code-point"))
     } else {
         let mut value = 0;
 
         for _ in 0..4 {
             let next_digit = match chars.next() {
                 Some(c) if c.is_hex_digit() => c,
-                _ => return Err(eyre!("Invalid hexadecimal escape sequence")),
+                _ => return Err(miette!("Invalid hexadecimal escape sequence")),
             };
 
             value = value * 16 + next_digit.to_digit(16).unwrap();
         }
 
         if value > 0x10ffff {
-            return Err(eyre!("Undefined Unicode code-point"));
+            return Err(miette!("Undefined Unicode code-point"));
         }
 
-        std::char::from_u32(value).ok_or(eyre!("Invalid Unicode code-point"))
+        std::char::from_u32(value).ok_or(miette!("Invalid Unicode code-point"))
     }
 }
 
@@ -168,7 +168,7 @@ pub fn try_parse_escape(chars: &mut Peekable<Chars>) -> Result<Option<char>> {
         Some('\u{2028}') => Ok(None),
         Some('\u{2029}') => Ok(None),
         Some(c) => parse_multi_byte_escape(chars, c).map(Some),
-        None => Err(eyre!("Unexpected EOF while parsing escape sequence")),
+        None => Err(miette!("Unexpected EOF while parsing escape sequence")),
     }
 }
 

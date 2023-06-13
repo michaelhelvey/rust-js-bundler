@@ -1,4 +1,4 @@
-use color_eyre::{eyre::eyre, Result};
+use miette::{miette, Result};
 use serde::Serialize;
 use std::{iter::Peekable, str::Chars};
 use strum_macros::EnumString;
@@ -104,7 +104,7 @@ pub fn try_parse_identifier(chars: &mut Peekable<Chars>) -> Result<Option<IdentP
 
                 match escaped_char {
                     Some(c) if !token_pred(c) => {
-                        return Err(eyre!(
+                        return Err(miette!(
                             "Invalid escape sequence in identifier: \\u{:04X}",
                             c as u32
                         ))
@@ -230,7 +230,11 @@ mod tests {
         let mut chars = src.chars().peekable();
         assert_eq!(
             try_parse_identifier(&mut chars).unwrap().unwrap(),
-            IdentParseResult::Keyword(Keyword::new("const".try_into()?))
+            IdentParseResult::Keyword(Keyword::new(
+                "const"
+                    .try_into()
+                    .map_err(|e| miette!("Could not parse keyword: {}", e))?
+            ))
         );
         assert_eq!(chars.next().unwrap(), ' ');
 

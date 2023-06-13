@@ -1,4 +1,4 @@
-use color_eyre::{eyre::eyre, Result};
+use miette::{miette, IntoDiagnostic, Result};
 use nom::AsChar;
 use serde::Serialize;
 use std::{iter::Peekable, str::Chars};
@@ -115,12 +115,12 @@ fn parse_scientific_exponent(chars: &mut Peekable<Chars>) -> Result<i64> {
     }
 
     if lexeme.is_empty() {
-        return Err(eyre!(
+        return Err(miette!(
             "Expected a number after 'e' while parsing numeric literal"
         ));
     }
 
-    Ok(sign.apply_i64(lexeme.parse::<i64>()?))
+    Ok(sign.apply_i64(lexeme.parse::<i64>().into_diagnostic()?))
 }
 
 /// Parses a number literal that may contain a trailing "n" to indicate a big
@@ -142,7 +142,7 @@ fn parse_maybe_big_int(
             }
 
             let value = num_bigint::BigInt::parse_bytes(lexeme.as_bytes(), base)
-                .ok_or(eyre!("failed to parse '{}' into BigInt", lexeme))?;
+                .ok_or(miette!("failed to parse '{}' into BigInt", lexeme))?;
             // TODO: write a "pretty formatter" for big int based on the base,
             // e.g. we want "0xFFn", not "FF"
             lexeme.push('n');
@@ -150,8 +150,8 @@ fn parse_maybe_big_int(
         }
         false => {
             let value = match base {
-                10 => lexeme.parse::<f64>()?,
-                _ => i64::from_str_radix(&lexeme, base)? as f64,
+                10 => lexeme.parse::<f64>().into_diagnostic()?,
+                _ => i64::from_str_radix(&lexeme, base).into_diagnostic()? as f64,
             };
 
             Ok(NumberLiteralValue::Primitive(sign.apply_f64(value)))
@@ -182,7 +182,9 @@ fn parse_base_10(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLitera
     };
 
     match exponent {
-        Some(exponent) => Ok((lexeme.parse::<f64>()? * 10f64.powi(exponent as i32)).into()),
+        Some(exponent) => {
+            Ok((lexeme.parse::<f64>().into_diagnostic()? * 10f64.powi(exponent as i32)).into())
+        }
         None => parse_maybe_big_int(chars, lexeme, 10, sign),
     }
 }
@@ -209,7 +211,7 @@ fn parse_hex_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLit
     let lexeme = consume_while(chars, |c| c.is_ascii_hexdigit());
 
     if lexeme.is_empty() {
-        return Err(eyre!(
+        return Err(miette!(
             "Expected a valid hexadecimal digit after '0x' while parsing numeric literal"
         ));
     }
@@ -221,7 +223,7 @@ fn parse_bin_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLit
     let lexeme = consume_while(chars, |c| c == '0' || c == '1');
 
     if lexeme.is_empty() {
-        return Err(eyre!(
+        return Err(miette!(
             "Expected a valid binary digit after '0b' while parsing numeric literal"
         ));
     }
@@ -233,7 +235,7 @@ fn parse_oct_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLit
     let lexeme = consume_while(chars, |c| c.is_oct_digit());
 
     if lexeme.is_empty() {
-        return Err(eyre!(
+        return Err(miette!(
             "Expected a valid octal digit while parsing octal-formatted numeric literal"
         ));
     }
@@ -264,7 +266,7 @@ fn parse_leading_zero_number(
             _ = chars.next();
             parse_oct_number(chars, sign)
         }
-        Some('_') => Err(eyre!("Numeric separator can not be used after leading 0")),
+        Some('_') => Err(miette!("Numeric separator can not be used after leading 0")),
         // TODO: support switching on whether legacy octals are allowed:
         Some(c) if c.is_ascii_digit() => parse_oct_number(chars, sign),
         _ => Ok(0.into()),

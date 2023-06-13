@@ -1,4 +1,4 @@
-use color_eyre::{eyre::eyre, Result};
+use miette::{miette, Result};
 use serde::Serialize;
 use std::{iter::Peekable, str::Chars};
 
@@ -120,7 +120,7 @@ pub fn parse_template_literal_string(
         }
     }
 
-    Err(eyre!("Unexpected EOF while parsing template literal"))
+    Err(miette!("Unexpected EOF while parsing template literal"))
 }
 
 /// Attempts to parse the start of a template literal from the top-level of the

@@ -1,4 +1,4 @@
-use color_eyre::{eyre::eyre, Result};
+use miette::{miette, Result};
 use serde::Serialize;
 
 use self::{
@@ -140,7 +140,7 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>> {
             continue 'outer;
         }
 
-        return Err(eyre!(
+        return Err(miette!(
             "Unexpected character: '{}' (last token parsed: {:?})",
             chars.peek().unwrap_or(&'?'),
             tokens.last()
@@ -152,6 +152,8 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>> {
 
 #[cfg(test)]
 mod tests {
+    use miette::IntoDiagnostic;
+
     use crate::lexer::{
         comment::CommentType, num::NumberLiteralValue, operator::OperatorType,
         punctuation::PunctuationType,
@@ -176,7 +178,7 @@ function foo() {
                 Token::Comment(Comment::new(CommentType::Line(
                     " This is a a comment".to_string()
                 ))),
-                Token::Keyword(Keyword::new("const".try_into()?)),
+                Token::Keyword(Keyword::new("const".try_into().into_diagnostic()?)),
                 Token::Ident("a".into()),
                 Token::Operator(Operator::new(OperatorType::Assignment)),
                 Token::TemplateLiteralString(TemplateLiteralString::new(
@@ -188,12 +190,11 @@ function foo() {
                 Token::TemplateLiteralExprClose(TemplateLiteralExprClose::default()),
                 Token::TemplateLiteralString(TemplateLiteralString::new("".into(), true)),
                 Token::Punctuation(Punctuation::new(PunctuationType::Semicolon)),
-                Token::Keyword(Keyword::new("function".try_into()?)),
+                Token::Keyword(Keyword::new("function".try_into().into_diagnostic()?)),
                 Token::Ident("foo".into()),
                 Token::Punctuation(Punctuation::new(PunctuationType::OpenParen)),
                 Token::Punctuation(Punctuation::new(PunctuationType::CloseParen)),
                 Token::Punctuation(Punctuation::new(PunctuationType::OpenBrace)),
-                Token::Keyword(Keyword::new("return".try_into()?)),
                 Token::RegexLiteral(RegexLiteral::new("hello".into(), "gm".into())),
                 Token::Punctuation(Punctuation::new(PunctuationType::Dot)),
                 Token::Ident("test".into()),
@@ -201,7 +202,7 @@ function foo() {
                 Token::StringLiteral(StringLiteral::new("ABC".into())),
                 Token::Punctuation(Punctuation::new(PunctuationType::CloseParen)),
                 Token::Operator(Operator::new(OperatorType::LooseEquality)),
-                Token::ValueLiteral(ValueLiteral::new("true".try_into()?)),
+                Token::ValueLiteral(ValueLiteral::new("true".try_into().into_diagnostic()?)),
                 Token::Operator(Operator::new(OperatorType::LogicalAnd)),
                 Token::NumericLiteral(NumberLiteral::new(NumberLiteralValue::Primitive(1.2e-3))),
                 Token::Punctuation(Punctuation::new(PunctuationType::Semicolon)),

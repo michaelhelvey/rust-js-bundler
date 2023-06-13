@@ -1,6 +1,6 @@
 use std::{iter::Peekable, str::Chars};
 
-use color_eyre::{eyre::eyre, Result};
+use miette::{miette, Result};
 use serde::Serialize;
 
 use super::escape_chars::try_parse_escape;
@@ -59,7 +59,7 @@ pub fn try_parse_string(chars: &mut Peekable<Chars>) -> Result<Option<StringLite
         }
 
         if super::utils::is_line_terminator(next_char) {
-            return Err(eyre!(
+            return Err(miette!(
                 "Unexpected line terminator while parsing string literal"
             ));
         }
@@ -74,7 +74,7 @@ pub fn try_parse_string(chars: &mut Peekable<Chars>) -> Result<Option<StringLite
     }
 
     if !found_end {
-        return Err(eyre!("Unexpected EOF while parsing string literal"));
+        return Err(miette!("Unexpected EOF while parsing string literal"));
     }
 
     Ok(Some(lexeme.into()))
