@@ -3,14 +3,13 @@ use std::{iter::Peekable, str::Chars};
 
 // TODO:
 // *) operators
-// *) regex literals
 // *) punctuators
-// *) hashbang comments
 mod comment;
 mod escape_chars;
 mod ident;
 mod num;
 mod old_number;
+mod regex;
 mod string;
 mod template;
 mod token;
