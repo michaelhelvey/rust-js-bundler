@@ -195,6 +195,7 @@ function foo() {
                 Token::Punctuation(Punctuation::new(PunctuationType::OpenParen)),
                 Token::Punctuation(Punctuation::new(PunctuationType::CloseParen)),
                 Token::Punctuation(Punctuation::new(PunctuationType::OpenBrace)),
+                Token::Keyword(Keyword::new("return".try_into().into_diagnostic()?)),
                 Token::RegexLiteral(RegexLiteral::new("hello".into(), "gm".into())),
                 Token::Punctuation(Punctuation::new(PunctuationType::Dot)),
                 Token::Ident("test".into()),
