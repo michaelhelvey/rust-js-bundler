@@ -1,6 +1,7 @@
-use std::{iter::Peekable, str::Chars};
-
-use super::utils::{try_parse_from_prefix_lookup, HasPrefixLookup};
+use super::{
+    code_iter::CodeIter,
+    utils::{try_parse_from_prefix_lookup, HasPrefixLookup},
+};
 use serde::Serialize;
 use strum_macros::EnumString;
 use yab_parser_macros::HasPrefixLookup;
@@ -36,12 +37,14 @@ impl Operator {
     }
 }
 
-pub fn try_parse_operator(chars: &mut Peekable<Chars>) -> Option<Operator> {
+pub fn try_parse_operator(chars: &mut CodeIter) -> Option<Operator> {
     try_parse_from_prefix_lookup::<OperatorType>(chars).map(Operator::new)
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::lexer::code_iter::IntoCodeIterator;
+
     use super::*;
 
     #[test]
@@ -55,7 +58,7 @@ mod tests {
         ];
 
         for op in operators {
-            let mut chars = op.0.chars().peekable();
+            let mut chars = op.0.into_code_iterator("script.js".to_string());
             let parsed = try_parse_operator(&mut chars).unwrap();
             assert_eq!(parsed.kind, op.1);
         }
@@ -63,7 +66,7 @@ mod tests {
 
     #[test]
     fn test_non_existent_operator() {
-        let mut chars = "foo".chars().peekable();
+        let mut chars = "foo".into_code_iterator("script.js".to_string());
         let parsed = try_parse_operator(&mut chars);
         assert!(parsed.is_none());
     }

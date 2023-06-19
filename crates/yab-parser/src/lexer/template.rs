@@ -1,8 +1,7 @@
 use miette::{miette, Result};
 use serde::Serialize;
-use std::{iter::Peekable, str::Chars};
 
-use super::escape_chars::try_parse_escape;
+use super::{code_iter::CodeIter, escape_chars::try_parse_escape};
 
 // Save allocating a string when we know the lexeme value already.
 static TEMPLATE_LITERAL_EXPR_CLOSE: &str = "}";
@@ -54,7 +53,7 @@ impl Default for TemplateLiteralExprClose {
 /// Return types have the same semantics as `try_parse_template_literal_start`
 /// et. al.
 pub fn try_parse_template_literal_expr_end(
-    chars: &mut Peekable<Chars>,
+    chars: &mut CodeIter,
 ) -> Result<
     Option<(
         TemplateLiteralExprClose,
@@ -93,7 +92,7 @@ pub fn try_parse_template_literal_expr_end(
 /// * `Err` if the next part of the template literal could not be parsed (e.g.
 /// because of an invalid escape sequence).
 pub fn parse_template_literal_string(
-    chars: &mut Peekable<Chars>,
+    chars: &mut CodeIter,
 ) -> Result<(TemplateLiteralString, Option<TemplateLiteralExprOpen>)> {
     let mut lexeme = String::new();
 
@@ -143,7 +142,7 @@ pub fn parse_template_literal_string(
 /// * `Err` if the next token is a template literal but it could not be parsed
 /// (e.g. due to an invalid escape sequence).
 pub fn try_parse_template_literal_start(
-    chars: &mut Peekable<Chars>,
+    chars: &mut CodeIter,
 ) -> Result<Option<(TemplateLiteralString, Option<TemplateLiteralExprOpen>)>> {
     match chars.peek() {
         Some('`') => {
@@ -156,12 +155,14 @@ pub fn try_parse_template_literal_start(
 
 #[cfg(test)]
 mod tests {
+    use crate::lexer::code_iter::IntoCodeIterator;
+
     use super::*;
 
     #[test]
     fn test_parse_template_literal_without_expr() {
         let src = "`hi there`";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
 
         assert_eq!(
             try_parse_template_literal_start(&mut chars)
@@ -177,7 +178,7 @@ mod tests {
     #[test]
     fn test_parse_template_literal_with_expression() {
         let src = "`hi there ${`";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
 
         assert_eq!(
             try_parse_template_literal_start(&mut chars)
@@ -193,7 +194,8 @@ mod tests {
     #[test]
     fn test_unexpected_eof_while_parsing_template_literal() {
         let src = "`hi there";
-        let result = try_parse_template_literal_start(&mut src.chars().peekable());
+        let result =
+            try_parse_template_literal_start(&mut src.into_code_iterator("script.js".to_string()));
         assert_eq!(
             result.unwrap_err().to_string(),
             "Unexpected EOF while parsing template literal"
@@ -203,7 +205,7 @@ mod tests {
     #[test]
     fn test_escape_sequences_are_parsed() {
         let src = r#"`hi ther\u0065!`"#;
-        let chars = &mut src.chars().peekable();
+        let chars = &mut src.into_code_iterator("script.js".to_string());
 
         assert_eq!(
             try_parse_template_literal_start(chars).unwrap().unwrap(),
@@ -218,7 +220,7 @@ mod tests {
     fn test_multi_line_template_literal() {
         let src = r#"`hi there:
         you`"#;
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
 
         assert_eq!(
             try_parse_template_literal_start(&mut chars)
@@ -234,7 +236,7 @@ mod tests {
     #[test]
     fn test_try_parse_template_literal_expr_close() {
         let src = "} end`";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
 
         assert_eq!(
             try_parse_template_literal_expr_end(&mut chars)
@@ -251,7 +253,7 @@ mod tests {
     #[test]
     fn test_try_parse_template_literal_expr_with_next_expr_open() {
         let src = "} end ${`";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
 
         assert_eq!(
             try_parse_template_literal_expr_end(&mut chars)
@@ -268,7 +270,7 @@ mod tests {
     #[test]
     fn test_expr_end_is_end_of_template_literal() {
         let src = "}`";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
 
         assert_eq!(
             try_parse_template_literal_expr_end(&mut chars)

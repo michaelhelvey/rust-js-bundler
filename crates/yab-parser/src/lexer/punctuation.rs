@@ -1,6 +1,7 @@
-use std::{iter::Peekable, str::Chars};
-
-use super::utils::{try_parse_from_prefix_lookup, HasPrefixLookup};
+use super::{
+    code_iter::CodeIter,
+    utils::{try_parse_from_prefix_lookup, HasPrefixLookup},
+};
 use serde::Serialize;
 use strum_macros::EnumString;
 use yab_parser_macros::HasPrefixLookup;
@@ -38,12 +39,14 @@ impl Punctuation {
     }
 }
 
-pub fn try_parse_punctuation(chars: &mut Peekable<Chars>) -> Option<Punctuation> {
+pub fn try_parse_punctuation(chars: &mut CodeIter) -> Option<Punctuation> {
     try_parse_from_prefix_lookup::<PunctuationType>(chars).map(Punctuation::new)
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::lexer::code_iter::IntoCodeIterator;
+
     use super::*;
 
     #[test]
@@ -58,7 +61,7 @@ mod tests {
         ];
 
         for p in punctuators {
-            let mut chars = p.0.chars().peekable();
+            let mut chars = p.0.into_code_iterator("script.js".to_string());
             let parsed = try_parse_punctuation(&mut chars).unwrap();
             assert_eq!(parsed.kind, p.1);
         }
@@ -66,7 +69,7 @@ mod tests {
 
     #[test]
     fn test_non_existent_punctuator() {
-        let mut chars = "!~~~~".chars().peekable();
+        let mut chars = "!~~~~".into_code_iterator("script.js".to_string());
         let parsed = try_parse_punctuation(&mut chars);
         assert!(parsed.is_none());
     }

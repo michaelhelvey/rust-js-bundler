@@ -6,9 +6,9 @@
 //!
 //! See: https://tc39.es/ecma262/#prod-EscapeSequence
 
+use super::code_iter::CodeIter;
 use miette::{miette, Result};
 use nom::AsChar;
-use std::{iter::Peekable, str::Chars};
 
 /// Attempts to parse an octal escape sequence into a single `char`, returning
 /// an Err if the sequence is out of range.  Advances the provided iterator past
@@ -16,7 +16,7 @@ use std::{iter::Peekable, str::Chars};
 ///
 /// *Note*:  The caller is responsible for ensuring that the initial character
 /// is a valid octal digit.
-fn parse_octal_escape_sequence(chars: &mut Peekable<Chars>, init: char) -> Result<char> {
+fn parse_octal_escape_sequence(chars: &mut CodeIter, init: char) -> Result<char> {
     let mut value = init.to_digit(8).ok_or(miette!(
         "internal parser error: caller must check that '{}' is a valid octal",
         init
@@ -44,7 +44,7 @@ fn parse_octal_escape_sequence(chars: &mut Peekable<Chars>, init: char) -> Resul
 
 /// Attempts to parse a hex escape sequence into a single `char`, returning an
 /// error if the escape sequence is invalid.
-fn parse_hex_escape_sequence(chars: &mut Peekable<Chars>) -> Result<char> {
+fn parse_hex_escape_sequence(chars: &mut CodeIter) -> Result<char> {
     let invalid_err_msg = "Invalid hexadecimal escape sequence";
 
     let mut value = match chars.next() {
@@ -67,7 +67,7 @@ fn parse_hex_escape_sequence(chars: &mut Peekable<Chars>) -> Result<char> {
 /// `Ok(char)` if the escape sequence can be parsed into a valid code point, and
 /// `Err` if the escape sequence is invalid (either because it is out of range,
 /// or because it is malformed).
-fn parse_unicode_escape_sequence(chars: &mut Peekable<Chars>) -> Result<char> {
+fn parse_unicode_escape_sequence(chars: &mut CodeIter) -> Result<char> {
     let delimiter = match chars.peek() {
         Some('{') => {
             _ = chars.next();
@@ -121,7 +121,7 @@ fn parse_unicode_escape_sequence(chars: &mut Peekable<Chars>) -> Result<char> {
 /// Parses a potentially multi-byte escape sequence into a single `char`, such
 /// as octal escapes, unicode escapes, etc.  Returns the provided `init` value
 /// as a fall through if no other matches were found.
-fn parse_multi_byte_escape(chars: &mut Peekable<Chars>, init: char) -> Result<char> {
+fn parse_multi_byte_escape(chars: &mut CodeIter, init: char) -> Result<char> {
     if init.is_oct_digit() {
         return parse_octal_escape_sequence(chars, init);
     }
@@ -151,7 +151,7 @@ fn parse_multi_byte_escape(chars: &mut Peekable<Chars>, init: char) -> Result<ch
 ///
 /// * `Err` if the next characters in the iterator are an escape sequence, but
 /// cannot be parsed into a `char`.
-pub fn try_parse_escape(chars: &mut Peekable<Chars>) -> Result<Option<char>> {
+pub fn try_parse_escape(chars: &mut CodeIter) -> Result<Option<char>> {
     // Start by trying to match against a "basic" escape sequence, before trying
     // to parse multi-byte sequences like octals, unicode, control codes, etc.
     match chars.next() {
@@ -174,18 +174,20 @@ pub fn try_parse_escape(chars: &mut Peekable<Chars>) -> Result<Option<char>> {
 
 #[cfg(test)]
 mod tests {
+    use crate::lexer::code_iter::IntoCodeIterator;
+
     use super::*;
 
     #[test]
     fn test_new_line_escape_sequence() {
-        let mut chars = r#"n"#.chars().peekable();
+        let mut chars = r#"n"#.into_code_iterator("script.js".to_string());
         assert_eq!(try_parse_escape(&mut chars).unwrap().unwrap(), '\n');
     }
 
     #[test]
     fn test_non_escape_chars_interpreted_as_identity() {
         let src = r#"a"#;
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(try_parse_escape(&mut chars).unwrap().unwrap(), 'a');
     }
 
@@ -205,7 +207,7 @@ mod tests {
         ];
 
         for (src, expected) in js_single_escapes {
-            let mut chars = src.chars().peekable();
+            let mut chars = src.into_code_iterator("script.js".to_string());
             assert_eq!(try_parse_escape(&mut chars).unwrap().unwrap(), expected);
         }
     }
@@ -213,7 +215,7 @@ mod tests {
     #[test]
     fn test_octal_escape_sequence() {
         let src = r#"0"#;
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(try_parse_escape(&mut chars).unwrap().unwrap(), '\u{0000}');
     }
 
@@ -224,7 +226,7 @@ mod tests {
         // it is implementation dependent.  So in _my_ implementation, it's a
         // syntax error no matter what!
         let src = r#"777"#;
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         let result = try_parse_escape(&mut chars);
 
         assert!(result.is_err());
@@ -237,7 +239,7 @@ mod tests {
     #[test]
     fn test_octal_escape_sequence_does_not_eat_trailing_characters() {
         let src = r#"39"#;
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(try_parse_escape(&mut chars).unwrap().unwrap(), '\u{0003}');
         assert_eq!(chars.next().unwrap(), '9');
     }
@@ -245,7 +247,7 @@ mod tests {
     #[test]
     fn test_hex_escape_sequence_where_no_leading_char() {
         let src = r#"x"#;
-        let result = try_parse_escape(&mut src.chars().peekable());
+        let result = try_parse_escape(&mut src.into_code_iterator("script.js".to_string()));
 
         assert!(result.is_err());
         assert_eq!(
@@ -257,7 +259,7 @@ mod tests {
     #[test]
     fn test_hex_escape_sequence_where_leading_char_not_hex_digit() {
         let src = r#"xG"#;
-        let result = try_parse_escape(&mut src.chars().peekable());
+        let result = try_parse_escape(&mut src.into_code_iterator("script.js".to_string()));
 
         assert!(result.is_err());
         assert_eq!(
@@ -269,7 +271,7 @@ mod tests {
     #[test]
     fn test_hex_escape_sequence_where_next_char_not_hex_digit() {
         let src = r#"xFG"#;
-        let result = try_parse_escape(&mut src.chars().peekable());
+        let result = try_parse_escape(&mut src.into_code_iterator("script.js".to_string()));
 
         assert!(result.is_err());
         assert_eq!(
@@ -281,14 +283,14 @@ mod tests {
     #[test]
     fn test_valid_hex_escape_sequence() {
         let src = r#"xFF"#;
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(try_parse_escape(&mut chars).unwrap().unwrap(), '\u{00ff}');
     }
 
     #[test]
     fn test_unicode_escape_sequence_with_braces() {
         let src = r#"u{1f600}"#;
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(try_parse_escape(&mut chars).unwrap().unwrap(), '😀');
         assert_eq!(chars.next(), None)
     }
@@ -296,7 +298,7 @@ mod tests {
     #[test]
     fn test_unicode_escape_sequence_without_braces() {
         let src = r#"u1f600"#;
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(try_parse_escape(&mut chars).unwrap().unwrap(), 'ὠ');
         assert_eq!(chars.next().unwrap(), '0');
     }
@@ -304,7 +306,7 @@ mod tests {
     #[test]
     fn test_unicode_escape_sequence_out_of_range() {
         let src = r#"u{1f6000}"#;
-        let result = try_parse_escape(&mut src.chars().peekable());
+        let result = try_parse_escape(&mut src.into_code_iterator("script.js".to_string()));
 
         assert!(result.is_err());
         assert_eq!(
@@ -316,7 +318,7 @@ mod tests {
     #[test]
     fn test_unicode_escape_sequence_invalid_chars() {
         let src = r#"u{1f6G0}"#;
-        let result = try_parse_escape(&mut src.chars().peekable());
+        let result = try_parse_escape(&mut src.into_code_iterator("script.js".to_string()));
 
         assert!(result.is_err());
         assert_eq!(
@@ -325,7 +327,7 @@ mod tests {
         );
 
         let src = r#"uFFG"#;
-        let result = try_parse_escape(&mut src.chars().peekable());
+        let result = try_parse_escape(&mut src.into_code_iterator("script.js".to_string()));
 
         assert!(result.is_err());
         assert_eq!(
@@ -337,7 +339,7 @@ mod tests {
     #[test]
     fn test_unicode_escape_does_not_eat_trailing_chars() {
         let src = r#"u00410"#;
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(try_parse_escape(&mut chars).unwrap().unwrap(), 'A');
         assert_eq!(chars.next().unwrap(), '0');
     }

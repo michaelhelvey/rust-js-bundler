@@ -1,9 +1,7 @@
-use std::{iter::Peekable, str::Chars};
-
 use miette::{miette, Result};
 use serde::Serialize;
 
-use super::utils::is_line_terminator;
+use super::{code_iter::CodeIter, utils::is_line_terminator};
 
 /// Represents a regex literal token.  Since we're not actually parsing the
 /// regex, or evaluating it, we don't need to parse the pattern, just the
@@ -25,7 +23,7 @@ impl RegexLiteral {
 /// Consumes the trailing '/' and returns the string in between as a pattern.
 /// Does not parse escape sequences, as the runtime RegEx engine will handle
 /// that.
-fn parse_regex_pattern(chars: &mut Peekable<Chars>) -> Result<String> {
+fn parse_regex_pattern(chars: &mut CodeIter) -> Result<String> {
     let mut lexeme = String::new();
     for next_char in chars.by_ref() {
         match next_char {
@@ -42,7 +40,7 @@ fn parse_regex_pattern(chars: &mut Peekable<Chars>) -> Result<String> {
     Err(miette!("Unterminated regex literal"))
 }
 
-fn parse_regex_flags(chars: &mut Peekable<Chars>) -> Result<String> {
+fn parse_regex_flags(chars: &mut CodeIter) -> Result<String> {
     let mut lexeme = String::new();
 
     while let Some(next_char) = chars.peek() {
@@ -77,7 +75,7 @@ fn parse_regex_flags(chars: &mut Peekable<Chars>) -> Result<String> {
 /// Note: this function is fairly naive about the difference between regex
 /// literals and comments, (e.g. /{pattern/ vs "//"}), so it assumes that the
 /// lexer tries to parse comments higher up in the loop.
-pub fn try_parse_regex_literal(chars: &mut Peekable<Chars>) -> Result<Option<RegexLiteral>> {
+pub fn try_parse_regex_literal(chars: &mut CodeIter) -> Result<Option<RegexLiteral>> {
     match chars.peek() {
         Some('/') => {
             _ = chars.next();
@@ -92,11 +90,13 @@ pub fn try_parse_regex_literal(chars: &mut Peekable<Chars>) -> Result<Option<Reg
 
 #[cfg(test)]
 mod tests {
+    use crate::lexer::code_iter::IntoCodeIterator;
+
     use super::*;
 
     #[test]
     fn test_try_parse_regex_literal() {
-        let mut chars = "/foo/g".chars().peekable();
+        let mut chars = "/foo/g".into_code_iterator("script.js".to_string());
         let result = try_parse_regex_literal(&mut chars).unwrap().unwrap();
         assert_eq!(
             result,
@@ -109,7 +109,7 @@ mod tests {
 
     #[test]
     fn test_regex_without_flags() {
-        let mut chars = "/foo/".chars().peekable();
+        let mut chars = "/foo/".into_code_iterator("script.js".to_string());
         let result = try_parse_regex_literal(&mut chars).unwrap().unwrap();
         assert_eq!(
             result,
@@ -122,7 +122,7 @@ mod tests {
 
     #[test]
     fn test_regex_with_invalid_flags() {
-        let mut chars = "/foo/z".chars().peekable();
+        let mut chars = "/foo/z".into_code_iterator("script.js".to_string());
         let result = try_parse_regex_literal(&mut chars);
 
         assert_eq!(
@@ -133,7 +133,7 @@ mod tests {
 
     #[test]
     fn test_regex_with_unexpected_line_break() {
-        let mut chars = "/foo\n/z".chars().peekable();
+        let mut chars = "/foo\n/z".into_code_iterator("script.js".to_string());
         let result = try_parse_regex_literal(&mut chars);
 
         assert_eq!(
@@ -144,7 +144,7 @@ mod tests {
 
     #[test]
     fn test_regex_flags_do_not_eat_next_chars() {
-        let mut chars = "/foo/g.".chars().peekable();
+        let mut chars = "/foo/g.".into_code_iterator("script.js".to_string());
         let result = try_parse_regex_literal(&mut chars).unwrap().unwrap();
         assert_eq!(
             result,

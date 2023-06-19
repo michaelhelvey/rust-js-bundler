@@ -1,7 +1,8 @@
 use miette::{miette, IntoDiagnostic, Result};
 use nom::AsChar;
 use serde::Serialize;
-use std::{iter::Peekable, str::Chars};
+
+use super::code_iter::CodeIter;
 
 #[derive(Debug, PartialEq, Serialize)]
 pub struct NumberLiteral {
@@ -96,7 +97,7 @@ fn is_numeric_separator(c: char) -> bool {
 
 // Attempts to parse the exponent of a scientific notation number.  Assumes that
 // the leading "e" has not yet been consumed.
-fn parse_scientific_exponent(chars: &mut Peekable<Chars>) -> Result<i64> {
+fn parse_scientific_exponent(chars: &mut CodeIter) -> Result<i64> {
     let mut lexeme = String::new();
     _ = chars.next(); // trailing 'e'
 
@@ -127,7 +128,7 @@ fn parse_scientific_exponent(chars: &mut Peekable<Chars>) -> Result<i64> {
 /// int.  Falls through to simply returning the primitive that the lexeme and
 /// the base parse to.
 fn parse_maybe_big_int(
-    chars: &mut Peekable<Chars>,
+    chars: &mut CodeIter,
     mut lexeme: String,
     base: u32,
     sign: Sign,
@@ -159,7 +160,7 @@ fn parse_maybe_big_int(
     }
 }
 
-fn parse_base_10(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLiteralValue> {
+fn parse_base_10(chars: &mut CodeIter, sign: Sign) -> Result<NumberLiteralValue> {
     let mut lexeme = String::new();
 
     'number: while let Some(c) = chars.peek() {
@@ -189,7 +190,7 @@ fn parse_base_10(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLitera
     }
 }
 
-fn consume_while(iter: &mut Peekable<Chars>, predicate: fn(char) -> bool) -> String {
+fn consume_while(iter: &mut CodeIter, predicate: fn(char) -> bool) -> String {
     let mut lexeme = String::new();
     while let Some(c) = iter.peek() {
         if is_numeric_separator(*c) {
@@ -207,7 +208,7 @@ fn consume_while(iter: &mut Peekable<Chars>, predicate: fn(char) -> bool) -> Str
     lexeme
 }
 
-fn parse_hex_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLiteralValue> {
+fn parse_hex_number(chars: &mut CodeIter, sign: Sign) -> Result<NumberLiteralValue> {
     let lexeme = consume_while(chars, |c| c.is_ascii_hexdigit());
 
     if lexeme.is_empty() {
@@ -219,7 +220,7 @@ fn parse_hex_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLit
     parse_maybe_big_int(chars, lexeme, 16, sign)
 }
 
-fn parse_bin_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLiteralValue> {
+fn parse_bin_number(chars: &mut CodeIter, sign: Sign) -> Result<NumberLiteralValue> {
     let lexeme = consume_while(chars, |c| c == '0' || c == '1');
 
     if lexeme.is_empty() {
@@ -231,7 +232,7 @@ fn parse_bin_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLit
     parse_maybe_big_int(chars, lexeme, 2, sign)
 }
 
-fn parse_oct_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLiteralValue> {
+fn parse_oct_number(chars: &mut CodeIter, sign: Sign) -> Result<NumberLiteralValue> {
     let lexeme = consume_while(chars, |c| c.is_oct_digit());
 
     if lexeme.is_empty() {
@@ -246,10 +247,7 @@ fn parse_oct_number(chars: &mut Peekable<Chars>, sign: Sign) -> Result<NumberLit
 /// Attempts to parse a number out of a lexeme that begins with a leading "0".
 /// For example, the literal number "0", or differently-based values like
 /// hexadecimal or binary.
-fn parse_leading_zero_number(
-    chars: &mut Peekable<Chars>,
-    sign: Sign,
-) -> Result<NumberLiteralValue> {
+fn parse_leading_zero_number(chars: &mut CodeIter, sign: Sign) -> Result<NumberLiteralValue> {
     // Consume leading zero:
     _ = chars.next();
 
@@ -284,7 +282,7 @@ fn parse_leading_zero_number(
 ///
 /// * `Err` - the next character of the iterator began a number literal,
 /// but it was malformed or otherwise unable to be parsed.
-pub fn try_parse_number(chars: &mut Peekable<Chars>) -> Result<Option<NumberLiteralValue>> {
+pub fn try_parse_number(chars: &mut CodeIter) -> Result<Option<NumberLiteralValue>> {
     let sign = match chars.peek() {
         Some('+') | Some('-') => Sign::from(chars.next()),
         _ => Sign::Positive,
@@ -301,12 +299,14 @@ pub fn try_parse_number(chars: &mut Peekable<Chars>) -> Result<Option<NumberLite
 
 #[cfg(test)]
 mod tests {
+    use crate::lexer::code_iter::IntoCodeIterator;
+
     use super::*;
 
     #[test]
     fn test_not_leading_digit_returns_none() {
         let src = "asdf";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(try_parse_number(&mut chars).unwrap(), None);
         assert_eq!(chars.next(), Some('a'));
     }
@@ -314,7 +314,7 @@ mod tests {
     #[test]
     fn test_parse_simple_integer() {
         let src = "123A";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(try_parse_number(&mut chars).unwrap().unwrap(), 123.into());
         assert_eq!(chars.next().unwrap(), 'A');
     }
@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn test_parse_simple_float() {
         let src = "123.01";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(
             try_parse_number(&mut chars).unwrap().unwrap(),
             123.01.into()
@@ -332,14 +332,14 @@ mod tests {
     #[test]
     fn test_scientific_notation_integer() {
         let src = "123e4";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(try_parse_number(&mut chars).unwrap().unwrap(), 123e4.into());
     }
 
     #[test]
     fn test_scientific_notation_float() {
         let src = "123.1e2";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(
             try_parse_number(&mut chars).unwrap().unwrap(),
             123.1e2.into()
@@ -349,7 +349,7 @@ mod tests {
     #[test]
     fn test_base_10_big_int() {
         let src = "123n";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(
             try_parse_number(&mut chars).unwrap().unwrap(),
             NumberLiteralValue::BigInt(BigIntStorage {
@@ -362,7 +362,7 @@ mod tests {
     #[test]
     fn test_try_float_big_int() {
         let src = "123.3n";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         let result = try_parse_number(&mut chars);
         assert_eq!(
             result.unwrap_err().to_string(),
@@ -373,7 +373,7 @@ mod tests {
     #[test]
     fn test_parse_negative_integer() {
         let src = "-123";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(
             try_parse_number(&mut chars).unwrap().unwrap(),
             (-123).into()
@@ -383,7 +383,7 @@ mod tests {
     #[test]
     fn test_negative_big_int() {
         let src = "-123n";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
 
         assert_eq!(
             try_parse_number(&mut chars).unwrap().unwrap(),
@@ -397,7 +397,7 @@ mod tests {
     #[test]
     fn test_negative_scientific_notation() {
         let src = "123e-1";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(
             try_parse_number(&mut chars).unwrap().unwrap(),
             123e-1.into()
@@ -407,21 +407,21 @@ mod tests {
     #[test]
     fn test_zero() {
         let src = "0";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(try_parse_number(&mut chars).unwrap().unwrap(), 0.into());
     }
 
     #[test]
     fn test_hexadecimal_number() {
         let src = "0xFF";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(try_parse_number(&mut chars).unwrap().unwrap(), 255.into());
     }
 
     #[test]
     fn test_negative_hexadecimal_number() {
         let src = "-0xFF";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(
             try_parse_number(&mut chars).unwrap().unwrap(),
             (-255).into()
@@ -431,7 +431,7 @@ mod tests {
     #[test]
     fn test_hexadecimal_big_int() {
         let src = "0xFFn";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(
             try_parse_number(&mut chars).unwrap().unwrap(),
             NumberLiteralValue::BigInt(BigIntStorage {
@@ -444,42 +444,42 @@ mod tests {
     #[test]
     fn test_bin_number() {
         let src = "0b101";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(try_parse_number(&mut chars).unwrap().unwrap(), 5.into());
     }
 
     #[test]
     fn test_strict_octal_number() {
         let src = "0o123";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(try_parse_number(&mut chars).unwrap().unwrap(), 83.into());
     }
 
     #[test]
     fn test_legacy_octal_number() {
         let src = "0123";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(try_parse_number(&mut chars).unwrap().unwrap(), 83.into());
     }
 
     #[test]
     fn test_num_with_underlines() {
         let src = "1_2_3";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(try_parse_number(&mut chars).unwrap().unwrap(), 123.into());
     }
 
     #[test]
     fn test_hex_with_underlines() {
         let src = "0xF_F";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(try_parse_number(&mut chars).unwrap().unwrap(), 255.into());
     }
 
     #[test]
     fn test_hex_with_invalid_numeric_separator() {
         let src = "0_xF_F";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         let result = try_parse_number(&mut chars);
         assert_eq!(
             result.unwrap_err().to_string(),
@@ -490,7 +490,7 @@ mod tests {
     #[test]
     fn test_binary_invalid_chars() {
         let src = "0b2";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         let result = try_parse_number(&mut chars);
         assert_eq!(
             result.unwrap_err().to_string(),
@@ -501,7 +501,7 @@ mod tests {
     #[test]
     fn test_octal_invalid_chars() {
         let src = "0o8";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         let result = try_parse_number(&mut chars);
         assert_eq!(
             result.unwrap_err().to_string(),
@@ -512,7 +512,7 @@ mod tests {
     #[test]
     fn test_hex_invalid_chars() {
         let src = "0xG";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         let result = try_parse_number(&mut chars);
         assert_eq!(
             result.unwrap_err().to_string(),

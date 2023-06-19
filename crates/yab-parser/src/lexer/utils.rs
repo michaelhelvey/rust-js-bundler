@@ -1,4 +1,4 @@
-use std::{iter::Peekable, str::Chars};
+use super::code_iter::CodeIter;
 
 /// Predicate to check if a character is a line terminator, as defined by the
 /// Ecmascript standard.
@@ -16,7 +16,7 @@ pub trait HasPrefixLookup {
     fn fields_starting_with(ident: &str) -> usize;
 }
 
-pub fn try_parse_from_prefix_lookup<T>(chars: &mut Peekable<Chars>) -> Option<T>
+pub fn try_parse_from_prefix_lookup<T>(chars: &mut CodeIter) -> Option<T>
 where
     for<'a> T: HasPrefixLookup + TryFrom<&'a str>,
     for<'a> <T as TryFrom<&'a str>>::Error: core::fmt::Debug,

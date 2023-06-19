@@ -2,6 +2,7 @@ use miette::{miette, Result};
 use serde::Serialize;
 
 use self::{
+    code_iter::IntoCodeIterator,
     comment::Comment,
     ident::{IdentParseResult, Identifier, Keyword, ValueLiteral},
     num::NumberLiteral,
@@ -12,6 +13,7 @@ use self::{
     template::{TemplateLiteralExprClose, TemplateLiteralExprOpen, TemplateLiteralString},
 };
 
+mod code_iter;
 mod comment;
 mod escape_chars;
 mod ident;
@@ -41,7 +43,7 @@ pub enum Token {
 }
 
 pub fn tokenize(src: &str) -> Result<Vec<Token>> {
-    let mut chars = src.chars().peekable();
+    let mut chars = src.into_code_iterator("script.js".to_string());
     let mut tokens = Vec::<Token>::new();
     let mut template_depth = 0;
 

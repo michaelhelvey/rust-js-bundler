@@ -1,9 +1,8 @@
 use miette::{miette, Result};
 use serde::Serialize;
-use std::{iter::Peekable, str::Chars};
 use strum_macros::EnumString;
 
-use super::escape_chars::try_parse_escape;
+use super::{code_iter::CodeIter, escape_chars::try_parse_escape};
 
 #[derive(Debug, PartialEq)]
 pub enum IdentParseResult {
@@ -81,7 +80,7 @@ impl From<&str> for Identifier {
 /// * `Ok(None)` if the iterator does not begin with a valid identifier character.
 ///
 /// * `Err` if an invalid escape sequence is encountered.
-pub fn try_parse_identifier(chars: &mut Peekable<Chars>) -> Result<Option<IdentParseResult>> {
+pub fn try_parse_identifier(chars: &mut CodeIter) -> Result<Option<IdentParseResult>> {
     let mut lexeme = String::new();
 
     let mut at_start = true;
@@ -148,12 +147,14 @@ pub fn try_parse_identifier(chars: &mut Peekable<Chars>) -> Result<Option<IdentP
 #[cfg(test)]
 mod tests {
 
+    use crate::lexer::code_iter::IntoCodeIterator;
+
     use super::*;
 
     #[test]
     fn test_parse_simple_identifier() {
         let src = "hello";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
 
         assert_eq!(
             try_parse_identifier(&mut chars).unwrap().unwrap(),
@@ -164,7 +165,7 @@ mod tests {
     #[test]
     fn test_parse_beginning_underscore_identifier() {
         let src = "_hello";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(
             try_parse_identifier(&mut chars).unwrap().unwrap(),
             IdentParseResult::Identifier(Identifier::from("_hello"))
@@ -174,7 +175,7 @@ mod tests {
     #[test]
     fn test_parse_numeric_identifier() {
         let src = "_hello123";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(
             try_parse_identifier(&mut chars).unwrap().unwrap(),
             IdentParseResult::Identifier(Identifier::from("_hello123"))
@@ -184,7 +185,7 @@ mod tests {
     #[test]
     fn test_parse_unicode_start_id() {
         let src = r#"\u0041BC"#;
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(
             try_parse_identifier(&mut chars).unwrap().unwrap(),
             IdentParseResult::Identifier(Identifier::from("ABC"))
@@ -194,7 +195,7 @@ mod tests {
     #[test]
     fn test_parse_unicode_mid() {
         let src = r#"A\u0042C"#;
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(
             try_parse_identifier(&mut chars).unwrap().unwrap(),
             IdentParseResult::Identifier(Identifier::from("ABC"))
@@ -204,7 +205,7 @@ mod tests {
     #[test]
     fn test_invalid_identifer() {
         let src = r#"AB\u0043\n"#;
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         let result = try_parse_identifier(&mut chars);
 
         assert_eq!(
@@ -216,7 +217,7 @@ mod tests {
     #[test]
     fn test_identifier_parser_does_not_eat_trailing_chars() {
         let src = r#"AB\u0043 "#;
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(
             try_parse_identifier(&mut chars).unwrap().unwrap(),
             IdentParseResult::Identifier(Identifier::from("ABC"))
@@ -227,7 +228,7 @@ mod tests {
     #[test]
     fn test_keyword() -> Result<()> {
         let src = "const a";
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(
             try_parse_identifier(&mut chars).unwrap().unwrap(),
             IdentParseResult::Keyword(Keyword::new(
@@ -250,7 +251,7 @@ mod tests {
         ];
 
         for (value_type, src) in value_literals {
-            let mut chars = src.chars().peekable();
+            let mut chars = src.into_code_iterator("script.js".to_string());
             assert_eq!(
                 try_parse_identifier(&mut chars).unwrap().unwrap(),
                 IdentParseResult::ValueLiteral(ValueLiteral::new(value_type))

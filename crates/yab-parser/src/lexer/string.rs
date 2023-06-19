@@ -1,9 +1,7 @@
-use std::{iter::Peekable, str::Chars};
-
 use miette::{miette, Result};
 use serde::Serialize;
 
-use super::escape_chars::try_parse_escape;
+use super::{code_iter::CodeIter, escape_chars::try_parse_escape};
 
 /// Represents a string literal token, with delimiters stripped.
 #[derive(Debug, Serialize, PartialEq)]
@@ -43,7 +41,7 @@ impl From<&str> for StringLiteral {
 ///
 /// * `Err` if an error occurred while parsing the string (e.g. an invalid
 /// escape character or unexpected EOF).
-pub fn try_parse_string(chars: &mut Peekable<Chars>) -> Result<Option<StringLiteral>> {
+pub fn try_parse_string(chars: &mut CodeIter) -> Result<Option<StringLiteral>> {
     let mut lexeme = String::new();
 
     let delimeter = match chars.peek() {
@@ -82,12 +80,14 @@ pub fn try_parse_string(chars: &mut Peekable<Chars>) -> Result<Option<StringLite
 
 #[cfg(test)]
 mod tests {
+    use crate::lexer::code_iter::IntoCodeIterator;
+
     use super::*;
 
     #[test]
     fn test_parse_double_quote_delimted_string() {
         let src = r#""hello world""#;
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
 
         let result = try_parse_string(&mut chars).unwrap().unwrap();
 
@@ -98,7 +98,7 @@ mod tests {
     #[test]
     fn test_parse_single_quoted_string() {
         let src = r#"'hello world'"#;
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
 
         let result = try_parse_string(&mut chars).unwrap().unwrap();
 
@@ -109,7 +109,7 @@ mod tests {
     #[test]
     fn test_empty_string_returns_none() {
         let src = r#""#;
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
 
         let result = try_parse_string(&mut chars).unwrap();
 
@@ -120,7 +120,7 @@ mod tests {
     #[test]
     fn test_invalid_delimiter_returns_none() {
         let src = r#"hello world"#;
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
 
         let result = try_parse_string(&mut chars).unwrap();
 
@@ -132,7 +132,7 @@ mod tests {
     fn test_unexpected_line_terminator_returns_err() {
         let src = r#""hello
         world""#;
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
 
         let result = try_parse_string(&mut chars);
 
@@ -146,7 +146,7 @@ mod tests {
     #[test]
     fn test_unexpected_eof_returns_err() {
         let src = r#""hello world"#;
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
 
         let result = try_parse_string(&mut chars);
 
@@ -160,7 +160,7 @@ mod tests {
     #[test]
     fn test_escape_sequences_are_parsed() {
         let src = r#""hello\nworld \u{1f600}""#;
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
         assert_eq!(
             try_parse_string(&mut chars).unwrap().unwrap(),
             "hello\nworld 😀".into()
@@ -170,7 +170,7 @@ mod tests {
     #[test]
     fn test_escape_sequences_eat_appropriate_leading_and_trailing_chars() {
         let src = r#""\u0041\u0042C""#;
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
 
         assert_eq!(try_parse_string(&mut chars).unwrap().unwrap(), "ABC".into());
     }
@@ -179,7 +179,7 @@ mod tests {
     fn test_escaped_line_character() {
         let src = r#""hello\
  world""#;
-        let mut chars = src.chars().peekable();
+        let mut chars = src.into_code_iterator("script.js".to_string());
 
         assert_eq!(
             try_parse_string(&mut chars).unwrap().unwrap(),
