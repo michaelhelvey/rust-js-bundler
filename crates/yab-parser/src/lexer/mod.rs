@@ -85,6 +85,7 @@ pub fn tokenize(src: &str, file_name: impl Into<String>) -> Result<Vec<Token>> {
         }
 
         if let Some(parse_result) = ident::try_parse_identifier(&mut chars)? {
+            eprintln!("parse_result: {:?}", parse_result);
             match parse_result {
                 IdentParseResult::Identifier(ident) => {
                     tokens.push(Token::Ident(ident));
@@ -94,6 +95,9 @@ pub fn tokenize(src: &str, file_name: impl Into<String>) -> Result<Vec<Token>> {
                 }
                 IdentParseResult::ValueLiteral(value_literal) => {
                     tokens.push(Token::ValueLiteral(value_literal));
+                }
+                IdentParseResult::Operator(operator) => {
+                    tokens.push(Token::Operator(operator));
                 }
             }
 
@@ -171,7 +175,7 @@ mod tests {
 const a = `my template: ${b}`;
 
 function foo() {
-    return /hello/gm.test("\u0041BC") == true && 1.2e-3;
+    return await /hello/gm.test("\u0041BC") == true && 1.2e-3;
 }
 "#;
 
@@ -193,12 +197,13 @@ function foo() {
                 Token::TemplateLiteralExprClose(TemplateLiteralExprClose::default()),
                 Token::TemplateLiteralString(TemplateLiteralString::new("".into(), true)),
                 Token::Punctuation(Punctuation::new(PunctuationType::Semicolon)),
-                Token::Keyword(Keyword::new("function".try_into().unwrap())),
+                Token::Keyword(Keyword::new(ident::KeywordType::Function)),
                 Token::Ident("foo".into()),
                 Token::Punctuation(Punctuation::new(PunctuationType::OpenParen)),
                 Token::Punctuation(Punctuation::new(PunctuationType::CloseParen)),
                 Token::Punctuation(Punctuation::new(PunctuationType::OpenBrace)),
                 Token::Keyword(Keyword::new("return".try_into().unwrap())),
+                Token::Operator(Operator::new(OperatorType::Await)),
                 Token::RegexLiteral(RegexLiteral::new("hello".into(), "gm".into())),
                 Token::Punctuation(Punctuation::new(PunctuationType::Dot)),
                 Token::Ident("test".into()),

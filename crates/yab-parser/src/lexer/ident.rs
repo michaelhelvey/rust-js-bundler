@@ -5,6 +5,7 @@ use strum_macros::EnumString;
 use super::{
     code_iter::{current_span_error, CodeIter, Span},
     escape_chars::try_parse_escape,
+    operator::{Operator, OperatorType},
 };
 
 #[derive(Debug, PartialEq)]
@@ -12,6 +13,7 @@ pub enum IdentParseResult {
     Identifier(Identifier),
     Keyword(Keyword),
     ValueLiteral(ValueLiteral),
+    Operator(Operator),
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -36,9 +38,14 @@ pub enum ValueLiteralType {
 #[derive(Debug, Serialize, PartialEq, EnumString)]
 #[strum(serialize_all = "snake_case")]
 pub enum KeywordType {
+    Async,
     Const,
-    Return,
     Function,
+    Import,
+    New,
+    Return,
+    Super,
+    This,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -141,6 +148,12 @@ pub fn try_parse_identifier(chars: &mut CodeIter) -> Result<Option<IdentParseRes
         return Ok(Some(IdentParseResult::Keyword(Keyword::new(keyword_type))));
     }
 
+    if let Ok(operator_type) = OperatorType::try_from(lexeme.as_str()) {
+        return Ok(Some(IdentParseResult::Operator(Operator::new(
+            operator_type,
+        ))));
+    }
+
     if let Ok(value_type) = ValueLiteralType::try_from(lexeme.as_str()) {
         return Ok(Some(IdentParseResult::ValueLiteral(ValueLiteral::new(
             value_type,
@@ -152,8 +165,8 @@ pub fn try_parse_identifier(chars: &mut CodeIter) -> Result<Option<IdentParseRes
 
 #[cfg(test)]
 mod tests {
-    use miette::miette;
     use crate::lexer::code_iter::IntoCodeIterator;
+    use miette::miette;
 
     use super::*;
 
