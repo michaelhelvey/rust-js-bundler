@@ -1,4 +1,4 @@
-use miette::{miette, ErrReport, LabeledSpan, Severity, SourceSpan};
+use miette::{miette, ErrReport, LabeledSpan, NamedSource, Severity, SourceSpan};
 use serde::Serialize;
 
 /// Represents the position of a single character in a source file.
@@ -9,6 +9,16 @@ pub struct Position {
     pub index: usize,
 }
 
+impl Default for Position {
+    fn default() -> Self {
+        Self {
+            line: 1,
+            column: 1,
+            index: 0,
+        }
+    }
+}
+
 /// Represents the location of a token in a source file.
 #[derive(Debug, Serialize, PartialEq)]
 pub struct Span {
@@ -17,9 +27,22 @@ pub struct Span {
     pub file_path: String,
 }
 
+impl Span {
+    pub fn new(start: Position, end: Position, file_path: impl Into<String>) -> Self {
+        Self {
+            start,
+            end,
+            file_path: file_path.into(),
+        }
+    }
+}
+
 impl Into<SourceSpan> for Span {
     fn into(self) -> SourceSpan {
-        SourceSpan::new(self.start.index.into(), self.end.index.into())
+        SourceSpan::new(
+            self.start.index.into(),
+            (self.end.index - self.start.index).into(),
+        )
     }
 }
 
@@ -29,7 +52,8 @@ impl Into<SourceSpan> for Span {
 /// reporting integration with miette, our diagnostic library of choice.
 #[derive(Debug)]
 pub struct CodeIter {
-    current_pos: Position,
+    current_position: Position,
+    previous_position: Option<Position>,
     source: String,
     file_path: String,
     chars: Vec<char>,
@@ -43,11 +67,12 @@ impl IntoCodeIterator for String {
     /// Consumes the string to create an iterator over its characters.
     fn into_code_iterator(self, file_path: String) -> CodeIter {
         CodeIter {
-            current_pos: Position {
+            current_position: Position {
                 line: 1,
                 column: 1,
                 index: 0,
             },
+            previous_position: None,
             chars: self.chars().collect::<Vec<char>>(),
             source: self,
             file_path,
@@ -59,11 +84,12 @@ impl IntoCodeIterator for &str {
     /// Consumes the string to create an iterator over its characters.
     fn into_code_iterator(self, file_path: String) -> CodeIter {
         CodeIter {
-            current_pos: Position {
+            current_position: Position {
                 line: 1,
                 column: 1,
                 index: 0,
             },
+            previous_position: None,
             chars: self.chars().collect::<Vec<char>>(),
             source: self.to_string(),
             file_path,
@@ -75,18 +101,19 @@ impl Iterator for CodeIter {
     type Item = char;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let char = self.chars.get(self.current_pos.index);
+        self.previous_position = Some(self.current_position.clone());
+        let char = self.chars.get(self.current_position.index);
 
         match char {
             Some('\n') => {
-                self.current_pos.index += 1;
-                self.current_pos.line += 1;
-                self.current_pos.column = 1;
+                self.current_position.index += 1;
+                self.current_position.line += 1;
+                self.current_position.column = 1;
                 Some('\n')
             }
             Some(c) => {
-                self.current_pos.index += 1;
-                self.current_pos.column += 1;
+                self.current_position.index += 1;
+                self.current_position.column += 1;
                 Some(*c)
             }
             None => return None,
@@ -97,61 +124,90 @@ impl Iterator for CodeIter {
 impl CodeIter {
     /// Returns the next character in the iterator without consuming it.
     pub fn peek(&self) -> Option<&char> {
-        self.chars.get(self.current_pos.index)
+        self.chars.get(self.current_position.index)
     }
 
     /// Returns the character `n` characters ahead in the iterator without
     /// consuming it.  peek_forward(0) is equivalent to peek().
     pub fn peek_forward(&self, n: usize) -> Option<&char> {
-        self.chars.get(self.current_pos.index + n)
+        self.chars.get(self.current_position.index + n)
     }
 
     /// Returns the current position of the iterator, expressed as a `Position`
     /// struct.
     pub fn current_position(&self) -> Position {
-        self.current_pos.clone()
+        self.current_position.clone()
     }
 
-    /// Given a start position, constructs a `Location` struct representing the
-    /// location that a given token spans.
-    pub fn location_from_start(&self, start: Position) -> Span {
-        let end = self.current_pos.clone();
-        Span {
-            start,
-            end,
-            file_path: self.file_path.clone(),
+    pub fn previous_position(&self) -> Position {
+        match self.previous_position {
+            Some(ref position) => position.clone(),
+            // If we haven't moved yet, we're at the beginning of the file.
+            None => Position::default(),
         }
+    }
+
+    pub fn file_path(&self) -> &str {
+        &self.file_path
     }
 
     /// Creates a miette `ErrReport` from a given `Span`
     pub fn to_span_error(&self, err_msg: &str, location: Span) -> ErrReport {
+        let column = location.start.column;
+        let line = location.start.line;
+
+        self.to_error_with_label(err_msg, LabeledSpan::at(location, err_msg), line, column)
+    }
+
+    fn to_error_with_label(
+        &self,
+        err_msg: &str,
+        label: LabeledSpan,
+        line: usize,
+        column: usize,
+    ) -> ErrReport {
         miette!(
             severity = Severity::Error,
             code = "SyntaxError",
-            labels = vec![LabeledSpan::at(location, err_msg)],
-            "{}",
-            err_msg
+            labels = vec![label],
+            "SyntaxError: {} at {}:{}:{}",
+            err_msg,
+            self.file_path,
+            line,
+            column
         )
         // This could be quite expensive on very large files, and I don't love
         // that, but I'm not sure if there's a better way to do it without
         // turning this trait into lifetime soup. I think I'm generally ok with
         // creating errors to be expensive, since it means we're terminating the
         // process, though?
-        .with_source_code(self.source.clone())
-    }
-
-    /// Creates a miette `ErrReport` from a given `Position`.
-    pub fn to_position_error(&self, err_msg: &str, position: Position) -> ErrReport {
-        miette!(
-            severity = Severity::Error,
-            code = "SyntaxError",
-            labels = vec![LabeledSpan::at_offset(position.index, err_msg)],
-            "{}",
-            err_msg
-        )
-        .with_source_code(self.source.clone())
+        .with_source_code(NamedSource::new(
+            self.file_path.clone(),
+            self.source.clone(),
+        ))
     }
 }
+
+macro_rules! current_span_error {
+    ($iter:expr, $start:expr, $err_msg:literal, $($arg:tt)*) => {
+        $iter.to_span_error(
+            format!($err_msg, $($arg)*).as_str(),
+            Span::new($start, $iter.current_position(), $iter.file_path()),
+        )
+    };
+}
+
+macro_rules! previous_span_error {
+    ($iter:expr, $start:expr, $err_msg:literal, $($arg:tt)*) => {
+        $iter.to_span_error(
+            format!($err_msg, $($arg)*).as_str(),
+            Span::new($start, $iter.previous_position(), $iter.file_path()),
+        )
+    };
+}
+
+pub(crate) use current_span_error;
+pub(crate) use previous_span_error;
 
 #[cfg(test)]
 mod tests {
@@ -183,7 +239,7 @@ mod tests {
     #[test]
     fn test_peek_multi() {
         let src = "abc".to_string();
-        let mut iter = src.into_code_iterator("foo.js".into());
+        let iter = src.into_code_iterator("foo.js".into());
         assert_eq!(iter.peek_forward(2), Some(&'c'));
         assert_eq!(iter.peek_forward(3), None);
     }

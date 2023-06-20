@@ -1,8 +1,8 @@
-use miette::{miette, Result};
+use miette::Result;
 use serde::Serialize;
 
 use self::{
-    code_iter::IntoCodeIterator,
+    code_iter::{current_span_error, IntoCodeIterator, Span},
     comment::Comment,
     ident::{IdentParseResult, Identifier, Keyword, ValueLiteral},
     num::NumberLiteral,
@@ -42,8 +42,8 @@ pub enum Token {
     RegexLiteral(RegexLiteral),
 }
 
-pub fn tokenize(src: &str) -> Result<Vec<Token>> {
-    let mut chars = src.into_code_iterator("script.js".to_string());
+pub fn tokenize(src: &str, file_name: String) -> Result<Vec<Token>> {
+    let mut chars = src.into_code_iterator(file_name);
     let mut tokens = Vec::<Token>::new();
     let mut template_depth = 0;
 
@@ -142,10 +142,12 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>> {
             continue 'outer;
         }
 
-        return Err(miette!(
-            "Unexpected character: '{}' (last token parsed: {:?})",
-            chars.peek().unwrap_or(&'?'),
-            tokens.last()
+        eprintln!("last token parsed: {:?}", tokens.last());
+        return Err(current_span_error!(
+            chars,
+            chars.current_position(),
+            "Unrecognized token '{}'",
+            chars.peek().unwrap_or(&'?')
         ));
     }
 
@@ -154,8 +156,6 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>> {
 
 #[cfg(test)]
 mod tests {
-    use miette::IntoDiagnostic;
-
     use crate::lexer::{
         comment::CommentType, num::NumberLiteralValue, operator::OperatorType,
         punctuation::PunctuationType,
@@ -164,7 +164,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_file_tokenization() -> Result<()> {
+    fn test_file_tokenization() {
         let src = r#"
 // This is a a comment
 const a = `my template: ${b}`;
@@ -175,12 +175,12 @@ function foo() {
 "#;
 
         assert_eq!(
-            tokenize(src).unwrap(),
+            tokenize(src, "script.js".to_string()).unwrap(),
             vec![
                 Token::Comment(Comment::new(CommentType::Line(
                     " This is a a comment".to_string()
                 ))),
-                Token::Keyword(Keyword::new("const".try_into().into_diagnostic()?)),
+                Token::Keyword(Keyword::new("const".try_into().unwrap())),
                 Token::Ident("a".into()),
                 Token::Operator(Operator::new(OperatorType::Assignment)),
                 Token::TemplateLiteralString(TemplateLiteralString::new(
@@ -192,12 +192,12 @@ function foo() {
                 Token::TemplateLiteralExprClose(TemplateLiteralExprClose::default()),
                 Token::TemplateLiteralString(TemplateLiteralString::new("".into(), true)),
                 Token::Punctuation(Punctuation::new(PunctuationType::Semicolon)),
-                Token::Keyword(Keyword::new("function".try_into().into_diagnostic()?)),
+                Token::Keyword(Keyword::new("function".try_into().unwrap())),
                 Token::Ident("foo".into()),
                 Token::Punctuation(Punctuation::new(PunctuationType::OpenParen)),
                 Token::Punctuation(Punctuation::new(PunctuationType::CloseParen)),
                 Token::Punctuation(Punctuation::new(PunctuationType::OpenBrace)),
-                Token::Keyword(Keyword::new("return".try_into().into_diagnostic()?)),
+                Token::Keyword(Keyword::new("return".try_into().unwrap())),
                 Token::RegexLiteral(RegexLiteral::new("hello".into(), "gm".into())),
                 Token::Punctuation(Punctuation::new(PunctuationType::Dot)),
                 Token::Ident("test".into()),
@@ -205,14 +205,26 @@ function foo() {
                 Token::StringLiteral(StringLiteral::new("ABC".into())),
                 Token::Punctuation(Punctuation::new(PunctuationType::CloseParen)),
                 Token::Operator(Operator::new(OperatorType::LooseEquality)),
-                Token::ValueLiteral(ValueLiteral::new("true".try_into().into_diagnostic()?)),
+                Token::ValueLiteral(ValueLiteral::new("true".try_into().unwrap())),
                 Token::Operator(Operator::new(OperatorType::LogicalAnd)),
                 Token::NumericLiteral(NumberLiteral::new(NumberLiteralValue::Primitive(1.2e-3))),
                 Token::Punctuation(Punctuation::new(PunctuationType::Semicolon)),
                 Token::Punctuation(Punctuation::new(PunctuationType::CloseBrace)),
             ]
         );
+    }
 
-        Ok(())
+    #[test]
+    fn test_binary_expression() {
+        let src = r#"const a = 1 + 2;"#;
+
+        assert_eq!(
+            tokenize(src, "script.js".to_string()).unwrap(),
+            vec![
+                Token::Keyword(Keyword::new("const".try_into().unwrap())),
+                Token::Ident("a".into()),
+                Token::Operator(Operator::new(OperatorType::Assignment)),
+            ]
+        );
     }
 }

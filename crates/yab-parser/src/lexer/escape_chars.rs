@@ -6,8 +6,8 @@
 //!
 //! See: https://tc39.es/ecma262/#prod-EscapeSequence
 
-use super::code_iter::CodeIter;
-use miette::{miette, Result};
+use super::code_iter::{current_span_error, CodeIter, Span};
+use miette::Result;
 use nom::AsChar;
 
 /// Attempts to parse an octal escape sequence into a single `char`, returning
@@ -17,10 +17,13 @@ use nom::AsChar;
 /// *Note*:  The caller is responsible for ensuring that the initial character
 /// is a valid octal digit.
 fn parse_octal_escape_sequence(chars: &mut CodeIter, init: char) -> Result<char> {
-    let mut value = init.to_digit(8).ok_or(miette!(
-        "internal parser error: caller must check that '{}' is a valid octal",
-        init
-    ))?;
+    let start_pos = chars.current_position();
+    let mut value = init.to_digit(8).unwrap_or_else(|| {
+        panic!(
+            "internal parser error: caller must check that '{}' is a valid octal",
+            init
+        )
+    });
 
     'octal: for _ in 0..2 {
         let next_digit = match chars.peek() {
@@ -32,9 +35,11 @@ fn parse_octal_escape_sequence(chars: &mut CodeIter, init: char) -> Result<char>
     }
 
     if value > 0o377 {
-        return Err(miette!(
+        return Err(current_span_error!(
+            chars,
+            start_pos,
             "invalid octal escape sequence: out of range: {}",
-            value,
+            value
         ));
     }
 
@@ -45,11 +50,14 @@ fn parse_octal_escape_sequence(chars: &mut CodeIter, init: char) -> Result<char>
 /// Attempts to parse a hex escape sequence into a single `char`, returning an
 /// error if the escape sequence is invalid.
 fn parse_hex_escape_sequence(chars: &mut CodeIter) -> Result<char> {
-    let invalid_err_msg = "Invalid hexadecimal escape sequence";
+    let start_pos = chars.current_position();
+    let invalid_hex_msg = "Invalid hexadecimal escape sequence";
 
     let mut value = match chars.next() {
         Some(c) if c.is_hex_digit() => c.to_digit(16).unwrap(),
-        _ => return Err(miette!(invalid_err_msg)),
+        _ => {
+            return Err(current_span_error!(chars, start_pos, "{}", invalid_hex_msg));
+        }
     };
 
     match chars.peek() {
@@ -57,10 +65,18 @@ fn parse_hex_escape_sequence(chars: &mut CodeIter) -> Result<char> {
             // safety:  we just checked the value exists and that it's a valid hex digit.
             value = value * 16 + chars.next().unwrap().to_digit(16).unwrap()
         }
-        _ => return Err(miette!(invalid_err_msg)),
+        _ => {
+            return Err(current_span_error!(chars, start_pos, "{}", invalid_hex_msg));
+        }
     };
 
-    std::char::from_u32(value).ok_or(miette!(invalid_err_msg))
+    std::char::from_u32(value).ok_or(current_span_error!(
+        chars,
+        start_pos,
+        "{}: invalid unicode code point: {}",
+        invalid_hex_msg,
+        value
+    ))
 }
 
 /// Attempts to parse a unicode escape sequence into a single `char`, returning
@@ -68,6 +84,7 @@ fn parse_hex_escape_sequence(chars: &mut CodeIter) -> Result<char> {
 /// `Err` if the escape sequence is invalid (either because it is out of range,
 /// or because it is malformed).
 fn parse_unicode_escape_sequence(chars: &mut CodeIter) -> Result<char> {
+    let start_pos = chars.current_position();
     let delimiter = match chars.peek() {
         Some('{') => {
             _ = chars.next();
@@ -87,34 +104,73 @@ fn parse_unicode_escape_sequence(chars: &mut CodeIter) -> Result<char> {
                     _ = chars.next();
                     break 'unicode;
                 }
-                _ => return Err(miette!("Invalid hexadecimal escape sequence")),
+                _ => {
+                    return Err(current_span_error!(
+                        chars,
+                        start_pos,
+                        "{}",
+                        "Invalid hexadecimal escape sequence for Unicode code-point"
+                    ))
+                }
             };
 
             value = value * 16 + next_digit.to_digit(16).unwrap();
         }
 
         if value > 0x10ffff {
-            return Err(miette!("Undefined Unicode code-point"));
+            return Err(current_span_error!(
+                chars,
+                start_pos,
+                "{}",
+                "Undefined Unicode code-point"
+            ));
         }
 
-        std::char::from_u32(value).ok_or(miette!("Invalid Unicode code-point"))
+        std::char::from_u32(value).ok_or(current_span_error!(
+            chars,
+            start_pos,
+            "{}",
+            "Invalid Unicode code-point"
+        ))
     } else {
         let mut value = 0;
 
         for _ in 0..4 {
             let next_digit = match chars.next() {
                 Some(c) if c.is_hex_digit() => c,
-                _ => return Err(miette!("Invalid hexadecimal escape sequence")),
+                Some(c) => {
+                    return Err(current_span_error!(
+                        chars,
+                        start_pos,
+                        "Invalid hexadecimal escape sequence: unexpected character '{}'",
+                        c,
+                    ))
+                }
+                None => {
+                    return Err(current_span_error!(
+                        chars,
+                        start_pos,
+                        "Invalid hexadecimal escape sequence: unexpected end of input",
+                    ))
+                }
             };
 
             value = value * 16 + next_digit.to_digit(16).unwrap();
         }
 
         if value > 0x10ffff {
-            return Err(miette!("Undefined Unicode code-point"));
+            return Err(current_span_error!(
+                chars,
+                start_pos,
+                "Undefined Unicode code-point",
+            ));
         }
 
-        std::char::from_u32(value).ok_or(miette!("Invalid Unicode code-point"))
+        std::char::from_u32(value).ok_or(current_span_error!(
+            chars,
+            start_pos,
+            "Invalid Unicode code-point",
+        ))
     }
 }
 
@@ -168,7 +224,12 @@ pub fn try_parse_escape(chars: &mut CodeIter) -> Result<Option<char>> {
         Some('\u{2028}') => Ok(None),
         Some('\u{2029}') => Ok(None),
         Some(c) => parse_multi_byte_escape(chars, c).map(Some),
-        None => Err(miette!("Unexpected EOF while parsing escape sequence")),
+        None => Err(current_span_error!(
+            chars,
+            chars.current_position(),
+            "{}",
+            "Unexpected EOF while parsing escape sequence"
+        )),
     }
 }
 
@@ -230,10 +291,10 @@ mod tests {
         let result = try_parse_escape(&mut chars);
 
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "invalid octal escape sequence: out of range: 511"
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("invalid octal escape sequence: out of range: 511"));
     }
 
     #[test]
@@ -250,10 +311,10 @@ mod tests {
         let result = try_parse_escape(&mut src.into_code_iterator("script.js".to_string()));
 
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Invalid hexadecimal escape sequence"
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid hexadecimal escape sequence"));
     }
 
     #[test]
@@ -262,10 +323,10 @@ mod tests {
         let result = try_parse_escape(&mut src.into_code_iterator("script.js".to_string()));
 
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Invalid hexadecimal escape sequence"
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid hexadecimal escape sequence"));
     }
 
     #[test]
@@ -274,10 +335,10 @@ mod tests {
         let result = try_parse_escape(&mut src.into_code_iterator("script.js".to_string()));
 
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Invalid hexadecimal escape sequence"
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid hexadecimal escape sequence"));
     }
 
     #[test]
@@ -309,10 +370,10 @@ mod tests {
         let result = try_parse_escape(&mut src.into_code_iterator("script.js".to_string()));
 
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Undefined Unicode code-point"
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Undefined Unicode code-point"));
     }
 
     #[test]
@@ -321,19 +382,19 @@ mod tests {
         let result = try_parse_escape(&mut src.into_code_iterator("script.js".to_string()));
 
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Invalid hexadecimal escape sequence"
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid hexadecimal escape sequence for Unicode code-point"));
 
         let src = r#"uFFG"#;
         let result = try_parse_escape(&mut src.into_code_iterator("script.js".to_string()));
 
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Invalid hexadecimal escape sequence"
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid hexadecimal escape sequence"));
     }
 
     #[test]

@@ -1,8 +1,8 @@
-use miette::{miette, IntoDiagnostic, Result};
+use miette::{IntoDiagnostic, Result};
 use nom::AsChar;
 use serde::Serialize;
 
-use super::code_iter::CodeIter;
+use super::code_iter::{current_span_error, CodeIter, Span};
 
 #[derive(Debug, PartialEq, Serialize)]
 pub struct NumberLiteral {
@@ -98,6 +98,7 @@ fn is_numeric_separator(c: char) -> bool {
 // Attempts to parse the exponent of a scientific notation number.  Assumes that
 // the leading "e" has not yet been consumed.
 fn parse_scientific_exponent(chars: &mut CodeIter) -> Result<i64> {
+    let start_pos = chars.current_position();
     let mut lexeme = String::new();
     _ = chars.next(); // trailing 'e'
 
@@ -116,8 +117,10 @@ fn parse_scientific_exponent(chars: &mut CodeIter) -> Result<i64> {
     }
 
     if lexeme.is_empty() {
-        return Err(miette!(
-            "Expected a number after 'e' while parsing numeric literal"
+        return Err(current_span_error!(
+            chars,
+            start_pos,
+            "Expected a number after 'e' while parsing numeric literal",
         ));
     }
 
@@ -133,6 +136,7 @@ fn parse_maybe_big_int(
     base: u32,
     sign: Sign,
 ) -> Result<NumberLiteralValue> {
+    let start_pos = chars.current_position();
     let is_big_int = matches!(chars.peek(), Some('n'));
 
     match is_big_int {
@@ -142,8 +146,9 @@ fn parse_maybe_big_int(
                 lexeme.insert(0, '-');
             }
 
-            let value = num_bigint::BigInt::parse_bytes(lexeme.as_bytes(), base)
-                .ok_or(miette!("failed to parse '{}' into BigInt", lexeme))?;
+            let value = num_bigint::BigInt::parse_bytes(lexeme.as_bytes(), base).ok_or(
+                current_span_error!(chars, start_pos, "failed to parse '{}' into BigInt", lexeme),
+            )?;
             // TODO: write a "pretty formatter" for big int based on the base,
             // e.g. we want "0xFFn", not "FF"
             lexeme.push('n');
@@ -209,11 +214,14 @@ fn consume_while(iter: &mut CodeIter, predicate: fn(char) -> bool) -> String {
 }
 
 fn parse_hex_number(chars: &mut CodeIter, sign: Sign) -> Result<NumberLiteralValue> {
+    let start_pos = chars.current_position();
     let lexeme = consume_while(chars, |c| c.is_ascii_hexdigit());
 
     if lexeme.is_empty() {
-        return Err(miette!(
-            "Expected a valid hexadecimal digit after '0x' while parsing numeric literal"
+        return Err(current_span_error!(
+            chars,
+            start_pos,
+            "Expected a valid hexadecimal digit after '0x' while parsing numeric literal",
         ));
     }
 
@@ -221,11 +229,14 @@ fn parse_hex_number(chars: &mut CodeIter, sign: Sign) -> Result<NumberLiteralVal
 }
 
 fn parse_bin_number(chars: &mut CodeIter, sign: Sign) -> Result<NumberLiteralValue> {
+    let start_pos = chars.current_position();
     let lexeme = consume_while(chars, |c| c == '0' || c == '1');
 
     if lexeme.is_empty() {
-        return Err(miette!(
-            "Expected a valid binary digit after '0b' while parsing numeric literal"
+        return Err(current_span_error!(
+            chars,
+            start_pos,
+            "Expected a valid binary digit after '0b' while parsing numeric literal",
         ));
     }
 
@@ -233,11 +244,14 @@ fn parse_bin_number(chars: &mut CodeIter, sign: Sign) -> Result<NumberLiteralVal
 }
 
 fn parse_oct_number(chars: &mut CodeIter, sign: Sign) -> Result<NumberLiteralValue> {
+    let start_pos = chars.current_position();
     let lexeme = consume_while(chars, |c| c.is_oct_digit());
 
     if lexeme.is_empty() {
-        return Err(miette!(
-            "Expected a valid octal digit while parsing octal-formatted numeric literal"
+        return Err(current_span_error!(
+            chars,
+            start_pos,
+            "Expected a valid octal digit while parsing octal-formatted numeric literal",
         ));
     }
 
@@ -264,7 +278,11 @@ fn parse_leading_zero_number(chars: &mut CodeIter, sign: Sign) -> Result<NumberL
             _ = chars.next();
             parse_oct_number(chars, sign)
         }
-        Some('_') => Err(miette!("Numeric separator can not be used after leading 0")),
+        Some('_') => Err(current_span_error!(
+            chars,
+            chars.current_position(),
+            "Numeric separator can not be used after leading 0",
+        )),
         // TODO: support switching on whether legacy octals are allowed:
         Some(c) if c.is_ascii_digit() => parse_oct_number(chars, sign),
         _ => Ok(0.into()),
@@ -364,10 +382,10 @@ mod tests {
         let src = "123.3n";
         let mut chars = src.into_code_iterator("script.js".to_string());
         let result = try_parse_number(&mut chars);
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "failed to parse '123.3' into BigInt"
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("failed to parse '123.3' into BigInt"));
     }
 
     #[test]
@@ -481,10 +499,10 @@ mod tests {
         let src = "0_xF_F";
         let mut chars = src.into_code_iterator("script.js".to_string());
         let result = try_parse_number(&mut chars);
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Numeric separator can not be used after leading 0"
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Numeric separator can not be used after leading 0"));
     }
 
     #[test]
@@ -492,10 +510,10 @@ mod tests {
         let src = "0b2";
         let mut chars = src.into_code_iterator("script.js".to_string());
         let result = try_parse_number(&mut chars);
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Expected a valid binary digit after '0b' while parsing numeric literal"
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Expected a valid binary digit after '0b' while parsing numeric literal"));
     }
 
     #[test]
@@ -503,10 +521,9 @@ mod tests {
         let src = "0o8";
         let mut chars = src.into_code_iterator("script.js".to_string());
         let result = try_parse_number(&mut chars);
-        assert_eq!(
-            result.unwrap_err().to_string(),
+        assert!(result.unwrap_err().to_string().contains(
             "Expected a valid octal digit while parsing octal-formatted numeric literal"
-        );
+        ));
     }
 
     #[test]
@@ -514,9 +531,8 @@ mod tests {
         let src = "0xG";
         let mut chars = src.into_code_iterator("script.js".to_string());
         let result = try_parse_number(&mut chars);
-        assert_eq!(
-            result.unwrap_err().to_string(),
+        assert!(result.unwrap_err().to_string().contains(
             "Expected a valid hexadecimal digit after '0x' while parsing numeric literal"
-        );
+        ));
     }
 }

@@ -1,7 +1,10 @@
-use miette::{miette, Result};
+use miette::Result;
 use serde::Serialize;
 
-use super::{code_iter::CodeIter, utils::is_line_terminator};
+use super::{
+    code_iter::{current_span_error, previous_span_error, CodeIter, Span},
+    utils::is_line_terminator,
+};
 
 /// Represents a regex literal token.  Since we're not actually parsing the
 /// regex, or evaluating it, we don't need to parse the pattern, just the
@@ -24,20 +27,28 @@ impl RegexLiteral {
 /// Does not parse escape sequences, as the runtime RegEx engine will handle
 /// that.
 fn parse_regex_pattern(chars: &mut CodeIter) -> Result<String> {
+    let start_pos = chars.current_position();
     let mut lexeme = String::new();
+
     for next_char in chars.by_ref() {
         match next_char {
             '/' => return Ok(lexeme),
             c if is_line_terminator(c) => {
-                return Err(miette!(
-                    "Unexpected line terminator while parsing regular expression"
+                return Err(previous_span_error!(
+                    chars,
+                    start_pos,
+                    "Unexpected line terminator while parsing regular expression",
                 ))
             }
             c => lexeme.push(c),
         }
     }
 
-    Err(miette!("Unterminated regex literal"))
+    Err(previous_span_error!(
+        chars,
+        start_pos,
+        "Unexpected EOF while parsing regular expression",
+    ))
 }
 
 fn parse_regex_flags(chars: &mut CodeIter) -> Result<String> {
@@ -52,7 +63,12 @@ fn parse_regex_flags(chars: &mut CodeIter) -> Result<String> {
             c if c.is_whitespace() => return Ok(lexeme),
             ';' => return Ok(lexeme),
             c if c.is_alphabetic() => {
-                return Err(miette!("Invalid regular expression flag '{}'", c))
+                return Err(current_span_error!(
+                    chars,
+                    chars.current_position(),
+                    "Invalid regular expression flag '{}'",
+                    c
+                ))
             }
             _c => return Ok(lexeme),
         }
@@ -125,10 +141,10 @@ mod tests {
         let mut chars = "/foo/z".into_code_iterator("script.js".to_string());
         let result = try_parse_regex_literal(&mut chars);
 
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Invalid regular expression flag 'z'"
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid regular expression flag 'z'"));
     }
 
     #[test]
@@ -136,10 +152,10 @@ mod tests {
         let mut chars = "/foo\n/z".into_code_iterator("script.js".to_string());
         let result = try_parse_regex_literal(&mut chars);
 
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Unexpected line terminator while parsing regular expression"
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Unexpected line terminator while parsing regular expression"));
     }
 
     #[test]

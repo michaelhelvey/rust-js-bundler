@@ -1,7 +1,12 @@
-use miette::{miette, Result};
+use miette::Result;
 use serde::Serialize;
 
-use super::{code_iter::CodeIter, escape_chars::try_parse_escape};
+use crate::lexer::code_iter::Span;
+
+use super::{
+    code_iter::{previous_span_error, CodeIter},
+    escape_chars::try_parse_escape,
+};
 
 /// Represents a string literal token, with delimiters stripped.
 #[derive(Debug, Serialize, PartialEq)]
@@ -43,6 +48,7 @@ impl From<&str> for StringLiteral {
 /// escape character or unexpected EOF).
 pub fn try_parse_string(chars: &mut CodeIter) -> Result<Option<StringLiteral>> {
     let mut lexeme = String::new();
+    let start_pos = chars.current_position();
 
     let delimeter = match chars.peek() {
         Some('\'') | Some('"') => chars.next().unwrap(),
@@ -57,8 +63,10 @@ pub fn try_parse_string(chars: &mut CodeIter) -> Result<Option<StringLiteral>> {
         }
 
         if super::utils::is_line_terminator(next_char) {
-            return Err(miette!(
-                "Unexpected line terminator while parsing string literal"
+            return Err(previous_span_error!(
+                chars,
+                start_pos,
+                "Unexpected line terminator while parsing string literal",
             ));
         }
 
@@ -72,7 +80,11 @@ pub fn try_parse_string(chars: &mut CodeIter) -> Result<Option<StringLiteral>> {
     }
 
     if !found_end {
-        return Err(miette!("Unexpected EOF while parsing string literal"));
+        return Err(previous_span_error!(
+            chars,
+            start_pos,
+            "Unexpected EOF while parsing string literal",
+        ));
     }
 
     Ok(Some(lexeme.into()))
@@ -137,10 +149,10 @@ mod tests {
         let result = try_parse_string(&mut chars);
 
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Unexpected line terminator while parsing string literal"
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Unexpected line terminator while parsing string literal"));
     }
 
     #[test]
@@ -151,10 +163,10 @@ mod tests {
         let result = try_parse_string(&mut chars);
 
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Unexpected EOF while parsing string literal"
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Unexpected EOF while parsing string literal"));
     }
 
     #[test]

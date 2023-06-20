@@ -1,7 +1,10 @@
-use miette::{miette, Result};
+use miette::Result;
 use serde::Serialize;
 
-use super::{code_iter::CodeIter, escape_chars::try_parse_escape};
+use super::{
+    code_iter::{previous_span_error, CodeIter, Span},
+    escape_chars::try_parse_escape,
+};
 
 // Save allocating a string when we know the lexeme value already.
 static TEMPLATE_LITERAL_EXPR_CLOSE: &str = "}";
@@ -94,6 +97,7 @@ pub fn try_parse_template_literal_expr_end(
 pub fn parse_template_literal_string(
     chars: &mut CodeIter,
 ) -> Result<(TemplateLiteralString, Option<TemplateLiteralExprOpen>)> {
+    let start_pos = chars.current_position();
     let mut lexeme = String::new();
 
     while let Some(next_char) = chars.next() {
@@ -119,7 +123,11 @@ pub fn parse_template_literal_string(
         }
     }
 
-    Err(miette!("Unexpected EOF while parsing template literal"))
+    Err(previous_span_error!(
+        chars,
+        start_pos,
+        "Unexpected EOF while parsing template literal",
+    ))
 }
 
 /// Attempts to parse the start of a template literal from the top-level of the
@@ -196,10 +204,10 @@ mod tests {
         let src = "`hi there";
         let result =
             try_parse_template_literal_start(&mut src.into_code_iterator("script.js".to_string()));
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Unexpected EOF while parsing template literal"
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Unexpected EOF while parsing template literal"));
     }
 
     #[test]

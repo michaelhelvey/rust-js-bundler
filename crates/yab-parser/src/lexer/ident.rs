@@ -1,8 +1,11 @@
-use miette::{miette, Result};
+use miette::Result;
 use serde::Serialize;
 use strum_macros::EnumString;
 
-use super::{code_iter::CodeIter, escape_chars::try_parse_escape};
+use super::{
+    code_iter::{current_span_error, CodeIter, Span},
+    escape_chars::try_parse_escape,
+};
 
 #[derive(Debug, PartialEq)]
 pub enum IdentParseResult {
@@ -81,6 +84,7 @@ impl From<&str> for Identifier {
 ///
 /// * `Err` if an invalid escape sequence is encountered.
 pub fn try_parse_identifier(chars: &mut CodeIter) -> Result<Option<IdentParseResult>> {
+    let start_pos = chars.current_position();
     let mut lexeme = String::new();
 
     let mut at_start = true;
@@ -103,10 +107,12 @@ pub fn try_parse_identifier(chars: &mut CodeIter) -> Result<Option<IdentParseRes
 
                 match escaped_char {
                     Some(c) if !token_pred(c) => {
-                        return Err(miette!(
+                        return Err(current_span_error!(
+                            chars,
+                            start_pos,
                             "Invalid escape sequence in identifier: \\u{:04X}",
                             c as u32
-                        ))
+                        ));
                     }
                     Some(c) => c,
                     _ => continue 'ident,
@@ -146,7 +152,7 @@ pub fn try_parse_identifier(chars: &mut CodeIter) -> Result<Option<IdentParseRes
 
 #[cfg(test)]
 mod tests {
-
+    use miette::miette;
     use crate::lexer::code_iter::IntoCodeIterator;
 
     use super::*;
@@ -208,10 +214,10 @@ mod tests {
         let mut chars = src.into_code_iterator("script.js".to_string());
         let result = try_parse_identifier(&mut chars);
 
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Invalid escape sequence in identifier: \\u000A"
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid escape sequence in identifier: \\u000A"));
     }
 
     #[test]
