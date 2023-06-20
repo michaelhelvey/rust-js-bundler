@@ -31,6 +31,9 @@ where
             if prefix_matches > 0 {
                 // If we have at least one match, then we are safe to progress
                 // and consume the character we just used on the lexeme.
+                // Note: it's only "safe" if there is an actual operator for
+                // every prefix, which I _think_ is true off the top of my head,
+                // but might not be.  e.g. !== falls back to !.
                 _ = chars.next();
 
                 // While we can continue getting characters, check if adding the
@@ -60,7 +63,9 @@ where
                 // characters altogether, or because we've found the longest
                 // operator.
                 let prefix_ref = prefix_lexeme.as_str();
-                let operator_type = T::try_from(prefix_ref).unwrap();
+                let operator_type = T::try_from(prefix_ref).unwrap_or_else(|e| {
+                    panic!("Failed to parse operator: {}: {:?}", prefix_ref, e)
+                });
                 return Some(operator_type);
             }
 

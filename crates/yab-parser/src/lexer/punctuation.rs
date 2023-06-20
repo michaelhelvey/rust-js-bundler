@@ -11,21 +11,42 @@ pub enum PunctuationType {
     #[token(lexeme = ";")]
     #[strum(serialize = ";")]
     Semicolon,
+
+    #[token(lexeme = ":")]
+    #[strum(serialize = ":")]
+    Colon,
+
     #[token(lexeme = "(")]
     #[strum(serialize = "(")]
     OpenParen,
+
     #[token(lexeme = ")")]
     #[strum(serialize = ")")]
     CloseParen,
+
+    #[token(lexeme = "[")]
+    #[strum(serialize = "[")]
+    OpenBracket,
+
+    #[token(lexeme = "]")]
+    #[strum(serialize = "]")]
+    CloseBracket,
+
     #[token(lexeme = "{")]
     #[strum(serialize = "{")]
     OpenBrace,
+
     #[token(lexeme = "}")]
     #[strum(serialize = "}")]
     CloseBrace,
+
     #[token(lexeme = ".")]
     #[strum(serialize = ".")]
     Dot,
+
+    #[token(lexeme = ",")]
+    #[strum(serialize = ",")]
+    Comma,
 }
 
 #[derive(Debug, Serialize, PartialEq)]

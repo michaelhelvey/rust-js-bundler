@@ -12,18 +12,46 @@ pub enum OperatorType {
     #[token(lexeme = "+")]
     #[strum(serialize = "+")]
     Plus,
+
+    #[token(lexeme = "-")]
+    #[strum(serialize = "-")]
+    Minus,
+
     #[token(lexeme = "=")]
     #[strum(serialize = "=")]
     Assignment,
+
     #[token(lexeme = "==")]
     #[strum(serialize = "==")]
     LooseEquality,
+
     #[token(lexeme = "===")]
     #[strum(serialize = "===")]
     StrictEquality,
+
+    #[token(lexeme = "!==")]
+    #[strum(serialize = "!==")]
+    StrictNotEquality,
+
+    #[token(lexeme = "!")]
+    #[strum(serialize = "!")]
+    LogicalNot,
+
     #[token(lexeme = "&&")]
     #[strum(serialize = "&&")]
     LogicalAnd,
+
+    #[token(lexeme = ">")]
+    #[strum(serialize = ">")]
+    GreaterThan,
+
+    #[token(lexeme = "<")]
+    #[strum(serialize = "<")]
+    LessThan,
+
+    #[token(lexeme = "?")]
+    #[strum(serialize = "?")]
+    Ternary,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -55,6 +83,7 @@ mod tests {
             ("==", OperatorType::LooseEquality),
             ("===", OperatorType::StrictEquality),
             ("&&", OperatorType::LogicalAnd),
+            ("!==", OperatorType::StrictNotEquality),
         ];
 
         for op in operators {
