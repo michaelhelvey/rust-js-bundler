@@ -75,6 +75,15 @@ impl From<Option<char>> for Sign {
     }
 }
 
+impl From<Option<&char>> for Sign {
+    fn from(s: Option<&char>) -> Self {
+        match s {
+            Some('-') => Self::Negative,
+            _ => Self::Positive,
+        }
+    }
+}
+
 impl Sign {
     fn apply_f64(&self, value: f64) -> f64 {
         match self {
@@ -301,9 +310,24 @@ fn parse_leading_zero_number(chars: &mut CodeIter, sign: Sign) -> Result<NumberL
 /// * `Err` - the next character of the iterator began a number literal,
 /// but it was malformed or otherwise unable to be parsed.
 pub fn try_parse_number(chars: &mut CodeIter) -> Result<Option<NumberLiteralValue>> {
+    let mut has_sign = false;
     let sign = match chars.peek() {
-        Some('+') | Some('-') => Sign::from(chars.next()),
+        Some('+') | Some('-') => {
+            has_sign = true;
+            Sign::from(chars.peek())
+        }
         _ => Sign::Positive,
+    };
+
+    // Wait to consume the sign until we know we have a valid number,
+    // otherwise we might end up consuming an operator.
+    match chars.peek_forward(1) {
+        Some(c) if c.is_ascii_digit() => {
+            if has_sign {
+                _ = chars.next();
+            }
+        }
+        _ => {}
     };
 
     match chars.peek() {
@@ -534,5 +558,14 @@ mod tests {
         assert!(result.unwrap_err().to_string().contains(
             "Expected a valid hexadecimal digit after '0x' while parsing numeric literal"
         ));
+    }
+
+    #[test]
+    fn test_number_parser_does_not_consume_operators() {
+        let src = "+ 1";
+        let mut chars = src.into_code_iterator("script.js".to_string());
+        let result = try_parse_number(&mut chars);
+        assert!(result.unwrap().is_none());
+        assert_eq!(chars.peek(), Some(&'+'));
     }
 }

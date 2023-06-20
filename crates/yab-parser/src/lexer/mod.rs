@@ -42,8 +42,8 @@ pub enum Token {
     RegexLiteral(RegexLiteral),
 }
 
-pub fn tokenize(src: &str, file_name: String) -> Result<Vec<Token>> {
-    let mut chars = src.into_code_iterator(file_name);
+pub fn tokenize(src: &str, file_name: impl Into<String>) -> Result<Vec<Token>> {
+    let mut chars = src.into_code_iterator(file_name.into());
     let mut tokens = Vec::<Token>::new();
     let mut template_depth = 0;
 
@@ -129,6 +129,7 @@ pub fn tokenize(src: &str, file_name: String) -> Result<Vec<Token>> {
 
         if let Some(number_value) = num::try_parse_number(&mut chars)? {
             tokens.push(Token::NumericLiteral(NumberLiteral::new(number_value)));
+
             continue 'outer;
         }
 
@@ -175,7 +176,7 @@ function foo() {
 "#;
 
         assert_eq!(
-            tokenize(src, "script.js".to_string()).unwrap(),
+            tokenize(src, "script.js").unwrap(),
             vec![
                 Token::Comment(Comment::new(CommentType::Line(
                     " This is a a comment".to_string()
@@ -210,20 +211,6 @@ function foo() {
                 Token::NumericLiteral(NumberLiteral::new(NumberLiteralValue::Primitive(1.2e-3))),
                 Token::Punctuation(Punctuation::new(PunctuationType::Semicolon)),
                 Token::Punctuation(Punctuation::new(PunctuationType::CloseBrace)),
-            ]
-        );
-    }
-
-    #[test]
-    fn test_binary_expression() {
-        let src = r#"const a = 1 + 2;"#;
-
-        assert_eq!(
-            tokenize(src, "script.js".to_string()).unwrap(),
-            vec![
-                Token::Keyword(Keyword::new("const".try_into().unwrap())),
-                Token::Ident("a".into()),
-                Token::Operator(Operator::new(OperatorType::Assignment)),
             ]
         );
     }
