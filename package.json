@@ -3,14 +3,7 @@
 	"lint-staged": {
 		"**/*": "prettier --write --ignore-unknown"
 	},
-	"prettier": {
-		"useTabs": true,
-		"arrowParens": "avoid",
-		"trailingComma": "es5",
-		"semi": false,
-		"printWidth": 80,
-		"singleQuote": true
-	},
+	"prettier": "@michaelhelvey/prettier-config",
 	"devDependencies": {
 		"@michaelhelvey/prettier-config": "^1.0.0",
 		"husky": "^8.0.3",

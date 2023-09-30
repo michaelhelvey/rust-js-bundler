@@ -1,5 +1,14 @@
 # YAB
 
-Yet Another Bundler.
+Yet Another Bundler. A useless boil-the-ocean project, just for fun :)
 
-Or something. It's turning into a general purpose Javascript Thing (which means that I will never finish it.)
+## Getting Started
+
+At the time of writing, the only completed component is a (mostly spec compliant?) lexer. You can
+bench mark it on a reasonably large JS file (react-dom.development.js) by running `just bench`.
+
+As for other commands, you can do all the usual cargo things. See `justfile`.
+
+## License
+
+GPL-3.0
