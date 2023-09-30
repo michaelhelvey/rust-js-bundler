@@ -190,7 +190,7 @@ mod tests {
 // This is a a comment
 const a = `my template: ${b}`;
 
-function foo() {
+export function foo() {
     return await /hello/gm.test("\u0041BC") == true && 1.2e-3;
 }
 "#;
@@ -213,6 +213,7 @@ function foo() {
                 Token::TemplateLiteralExprClose(TemplateLiteralExprClose::default()),
                 Token::TemplateLiteralString(TemplateLiteralString::new("".into(), true)),
                 Token::Punctuation(Punctuation::new(PunctuationType::Semicolon)),
+                Token::Keyword(Keyword::new(ident::KeywordType::Export)),
                 Token::Keyword(Keyword::new(ident::KeywordType::Function)),
                 Token::Ident("foo".into()),
                 Token::Punctuation(Punctuation::new(PunctuationType::OpenParen)),

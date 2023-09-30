@@ -42,6 +42,7 @@ pub enum KeywordType {
     Const,
     Function,
     Import,
+    Export,
     New,
     Return,
     Super,
