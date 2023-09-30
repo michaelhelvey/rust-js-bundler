@@ -1,1 +1,0 @@
-- Replace a lot of the `String` arguments with `Into<String>` so that they can take &str.

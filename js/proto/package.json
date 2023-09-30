@@ -1,7 +1,0 @@
-{
-	"name": "@yab/proto",
-	"type": "module",
-	"scripts": {
-		"dev": "node --watch ./src/index.js"
-	}
-}
